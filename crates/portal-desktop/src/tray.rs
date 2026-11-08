@@ -22,6 +22,7 @@ pub fn run() -> Result<(), String> {
     let smoke = std::env::args().any(|arg| arg == "--smoke-test");
     if std::env::args().any(|arg| arg == "--scheduled-start") {
         let _ = platform::remove_legacy_startup();
+        platform::wait_for_tray_host();
     }
     if !preview && !smoke && platform::maintenance_busy() {
         platform::wait_and_restart_tray(0)?;

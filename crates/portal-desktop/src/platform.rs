@@ -95,6 +95,17 @@ pub fn open_settings(logs: bool, preview: bool) -> Result<(), String> {
         .map_err(|_| "无法打开设置，请确认程序文件完整。".to_owned())?;
     Ok(())
 }
+pub fn wait_for_tray_host() {
+    // A logon task can run before Explorer has created its notification area.
+    // Wait only for that host, never for Internet access or the auth service.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while unsafe { FindWindowW(wide("Shell_TrayWnd").as_ptr(), ptr::null()) }.is_null() {
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
 pub fn start_tray() -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     std::process::Command::new(sibling("portal-tray.exe")?)
