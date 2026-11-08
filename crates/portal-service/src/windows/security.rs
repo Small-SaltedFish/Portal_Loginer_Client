@@ -552,6 +552,35 @@ pub fn validate_install_ancestors(path: &Path) -> Result<()> {
     Ok(())
 }
 
+pub struct Maintenance(Handle);
+impl Drop for Maintenance {
+    fn drop(&mut self) {
+        unsafe {
+            windows_sys::Win32::System::Threading::ReleaseMutex(self.0 .0);
+        }
+    }
+}
+pub fn maintenance() -> Result<Maintenance> {
+    let descriptor = Descriptor::private()?;
+    let attributes = descriptor.attributes();
+    let handle = unsafe {
+        windows_sys::Win32::System::Threading::CreateMutexW(
+            &attributes,
+            0,
+            wide(r"Global\PortalLoginer.Maintenance.v1").as_ptr(),
+        )
+    };
+    if handle.is_null() {
+        return Err(io::Error::last_os_error().into());
+    }
+    let handle = Handle(handle);
+    let result = unsafe { windows_sys::Win32::System::Threading::WaitForSingleObject(handle.0, 0) };
+    if !matches!(result, 0 | 0x80) {
+        return Err(Error::Access);
+    }
+    Ok(Maintenance(handle))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

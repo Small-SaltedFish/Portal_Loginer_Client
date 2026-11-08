@@ -24,6 +24,7 @@ pub struct StatusView {
     pub network: Option<NetworkView>,
     pub issue: Option<String>,
     pub last_authentication_unix: Option<u64>,
+    pub update: portal_service::windows::UpdateView,
 }
 impl StatusView {
     pub fn parse(value: &serde_json::Value) -> Option<Self> {
@@ -56,6 +57,7 @@ pub fn phase_text(phase: &str) -> &'static str {
     match phase {
         "NETWORK_ERROR" => "网络异常，请检查 TUN 等代理配置",
         "MANUAL_REQUIRED" => "当前未连接互联网，请检查代理配置，或登录参数可能已更新；需要手动操作",
+        "UPDATING" => "正在静默更新",
         "LOGGED_IN" => "校园网已连接",
         "LOGGING_IN" => "正在认证",
         "VERIFYING" => "等待联网确认",

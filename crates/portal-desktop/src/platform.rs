@@ -314,3 +314,86 @@ impl Drop for Apartment {
         }
     }
 }
+
+pub fn fullscreen_busy() -> bool {
+    let mut state = 0;
+    (unsafe { windows_sys::Win32::UI::Shell::SHQueryUserNotificationState(&mut state) }) >= 0
+        && matches!(state, 2..=4)
+}
+pub fn maintenance_busy() -> bool {
+    use windows_sys::Win32::System::Threading::*;
+    let handle = unsafe {
+        OpenMutexW(
+            0x00100001,
+            0,
+            wide(r"Global\PortalLoginer.Maintenance.v1").as_ptr(),
+        )
+    };
+    if handle.is_null() {
+        return std::io::Error::last_os_error().raw_os_error() == Some(5);
+    }
+    let result = unsafe { WaitForSingleObject(handle, 0) };
+    if matches!(result, 0 | 0x80) {
+        unsafe {
+            ReleaseMutex(handle);
+        }
+    }
+    unsafe {
+        windows_sys::Win32::Foundation::CloseHandle(handle);
+    }
+    !matches!(result, 0 | 0x80)
+}
+pub fn wait_and_restart_tray(instance: u64) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    let source = std::env::current_exe().map_err(|_| "无法读取托盘路径")?;
+    let destination = std::env::temp_dir().join(format!(
+        "PortalLoginer-restart-{}-{}.exe",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    let mut input = std::fs::File::open(source).map_err(|_| "无法准备更新后恢复")?;
+    let mut output = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&destination)
+        .map_err(|_| "无法准备更新后恢复")?;
+    std::io::copy(&mut input, &mut output).map_err(|_| "无法准备更新后恢复")?;
+    drop(output);
+    std::process::Command::new(destination)
+        .arg("--wait-update")
+        .arg(instance.to_string())
+        .creation_flags(0x08000000)
+        .spawn()
+        .map_err(|_| "无法准备更新后恢复")?;
+    Ok(())
+}
+pub fn finish_update_restart(instance: u64) -> Result<(), String> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| "无法等待更新")?;
+    runtime.block_on(async {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(180);
+        while tokio::time::Instant::now() < deadline {
+            if !maintenance_busy() {
+                if let Ok(value) = portal_service::windows::request(
+                    &portal_service::windows::ClientRequest::Status,
+                )
+                .await
+                {
+                    if value["status"]["phase"] != "UPDATING"
+                        && (value["status"]["instance_id"].as_u64() != Some(instance)
+                            || value["status"]["update"]["phase"] == "failed")
+                    {
+                        return start_tray();
+                    }
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+        start_tray()
+    })
+}

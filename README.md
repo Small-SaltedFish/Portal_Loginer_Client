@@ -2,7 +2,7 @@
 
 项目地址：[Small-SaltedFish/Portal_Loginer_Client](https://github.com/Small-SaltedFish/Portal_Loginer_Client)。
 
-先完成 Windows，再接入 macOS。当前开发版包含登录面板、托盘、后台服务，以及带桌面入口和卸载入口的 Windows 安装包；自动更新尚未完成。
+先完成 Windows，再接入 macOS。当前开发版包含登录面板、托盘、后台服务，以及带桌面入口和卸载入口的 Windows 安装包；已接入签名更新和镜像备用下载。
 
 - [迁移兼容清单](docs/MIGRATION.md)：协议、配置、状态、密钥调用及桌面差异。
 - [0.1.3 原行为复核](docs/BASELINE-RESTORATION.md)：本轮重新读取原源码后恢复的入口、缓存、密钥与请求规则。
@@ -11,7 +11,7 @@
 - [Rust 核心说明](docs/CORE.md)：已实现能力、运行方法、平台接入约定与兼容边界。
 - [Windows 服务说明](docs/WINDOWS.md)：服务命令、权限、凭据、网络事件及实机验收边界。
 - [桌面版使用说明](docs/DESKTOP.md)：设置、托盘和开发版限制。
-- `crates/portal-update/`：更新清单签名、来源、版本、平台及文件完整性验证。
+- `crates/portal-update/`：签名、来源、版本、文件验证、镜像测速与下载。
 - `crates/portal-core/`：协议、加密、直连网络、认证事务与状态决策。
 - `crates/portal-service/`：Windows 服务宿主、DPAPI、配置、命名管道与事件调度。
 - `crates/portal-desktop/`：托盘、设置窗口与原生通知。
@@ -34,3 +34,5 @@
 脚本优先使用项目 `.tools` 内的工具链；其他环境安装 Rust 后可直接运行 `cargo test --workspace --locked`。测试使用模拟响应、本机 HTTP/DNS/TLS、真实 DPAPI/命名管道及只读网络查询，不执行真实校园认证。正式构建生成 `target/release/portal-service.exe`；`scripts/package-dev.ps1` 可生成本地开发压缩包。
 
 完整安装包由 `scripts/package-installer.ps1` 构建，需 NSIS 3.11（优先使用项目 `.tools/nsis-download/nsis-3.11`）。使用方法见桌面说明。后续完成安装卸载实机验证、自动更新、登录前联网、Wi-Fi 和崩溃恢复验收，再接入 macOS。
+
+0.2.6 已接入 Releases 更新。具体下载策略、密钥备份和发布步骤见 docs/UPDATES.md；旧版需先手动升级本次。

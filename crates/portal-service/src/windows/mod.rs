@@ -73,3 +73,6 @@ pub fn cli() -> Result<()> {
 }
 
 mod uninstall;
+
+mod updates;
+pub use updates::View as UpdateView;

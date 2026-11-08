@@ -262,6 +262,11 @@ impl App {
                                 .into();
                             }
                         }
+                        Tag::Update => {
+                            self.busy = false;
+                            self.error = false;
+                            self.message = "已请求检查更新，可在关于页查看进度。".into();
+                        }
                         Tag::Logout => {
                             self.busy = false;
                             self.error = false;
@@ -395,6 +400,9 @@ pub fn run() -> Result<(), String> {
         return Ok(());
     };
     if !preview {
+        if platform::maintenance_busy() {
+            return Err("程序正在安装或更新，请稍后打开。".into());
+        }
         platform::start_tray()?;
     }
     let _apartment = platform::Apartment::new()?;

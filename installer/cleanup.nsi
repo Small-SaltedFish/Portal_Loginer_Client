@@ -1,7 +1,7 @@
 Unicode true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
-!define VERSION "0.2.5"
+!define VERSION "0.2.6"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\PortalLoginer"
 !include "cleanup.nsh"
 Name "Portal Loginer 卸载与残留清理"
@@ -17,7 +17,14 @@ Icon "..\assets\portal.ico"
 !define MUI_FINISHPAGE_TEXT "Portal Loginer 已卸载。现在可以重新安装。"
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_LANGUAGE "SimpChinese"
+Var MaintenanceHandle
+!include "maintenance.nsh"
+!insertmacro PortalMaintenance ""
+Function .onGUIEnd
+  Call ReleaseMaintenance
+FunctionEnd
 Function .onInit
+  Call AcquireMaintenance
   SetRegView 64
   ReadRegStr $0 HKLM "${UNINSTALL_KEY}" "InstallLocation"
   ${If} $0 != ""
@@ -26,4 +33,5 @@ Function .onInit
 FunctionEnd
 Section "卸载与残留清理"
   !insertmacro PortalCleanup ""
+  Call ReleaseMaintenance
 SectionEnd

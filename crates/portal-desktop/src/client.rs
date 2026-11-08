@@ -10,6 +10,8 @@ pub enum Tag {
     Inspect,
     Action,
     Logout,
+    Activity,
+    Update,
     Logs,
     Confirm,
     Setup,

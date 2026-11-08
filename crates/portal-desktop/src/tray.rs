@@ -20,6 +20,10 @@ enum Input {
 pub fn run() -> Result<(), String> {
     let preview = std::env::args().any(|arg| arg == "--preview");
     let smoke = std::env::args().any(|arg| arg == "--smoke-test");
+    if !preview && !smoke && platform::maintenance_busy() {
+        platform::wait_and_restart_tray(0)?;
+        return Ok(());
+    }
     let Some(_instance) = platform::single_instance(
         if preview {
             r"Local\PortalLoginer.Tray.Preview.v1"
@@ -101,6 +105,13 @@ pub fn run() -> Result<(), String> {
     } else {
         notifications::seen()
     });
+    worker.send(
+        Tag::Activity,
+        ClientRequest::UserActivity {
+            busy: platform::fullscreen_busy(),
+        },
+    );
+    let activity_timer = unsafe { SetTimer(ptr::null_mut(), 0, 30000, None) };
     let started = Instant::now();
     if smoke {
         unsafe {
@@ -119,8 +130,17 @@ pub fn run() -> Result<(), String> {
         if smoke && started.elapsed().as_secs() >= 12 {
             break;
         }
+        if message.message == WM_TIMER && message.wParam == activity_timer {
+            worker.send(
+                Tag::Activity,
+                ClientRequest::UserActivity {
+                    busy: platform::fullscreen_busy(),
+                },
+            );
+        }
         while let Ok(event) = worker.events.try_recv() {
             match event {
+                Event::Reply(Tag::Activity, _) => {}
                 Event::Reply(Tag::Quit, Ok(value)) if value["ok"] == true => {
                     platform::close_settings(preview);
                     break 'running;
@@ -139,7 +159,14 @@ pub fn run() -> Result<(), String> {
                         phase: "UNAVAILABLE".into(),
                         ..Default::default()
                     });
+                    if status.phase == "UPDATING"
+                        && platform::wait_and_restart_tray(status.instance_id).is_ok()
+                    {
+                        platform::close_settings(preview);
+                        break 'running;
+                    }
                     let available = status.phase != "UNAVAILABLE";
+                    update.set_enabled(available);
                     let error = matches!(
                         status.phase.as_str(),
                         "NETWORK_ERROR" | "MANUAL_REQUIRED" | "PROBE_UNKNOWN"
@@ -222,6 +249,8 @@ pub fn run() -> Result<(), String> {
                         worker.send(Tag::Action, ClientRequest::Relogin);
                     } else if id == *pause.id() {
                         worker.send(Tag::Action, ClientRequest::Logout);
+                    } else if id == *update.id() {
+                        worker.send(Tag::Update, ClientRequest::CheckUpdates);
                     } else if id == *quit.id() && worker.quit() {
                         exiting = true;
                         quit.set_enabled(false);
@@ -234,6 +263,9 @@ pub fn run() -> Result<(), String> {
                 }
             }
         }
+    }
+    unsafe {
+        KillTimer(ptr::null_mut(), activity_timer);
     }
     if smoke {
         unsafe {

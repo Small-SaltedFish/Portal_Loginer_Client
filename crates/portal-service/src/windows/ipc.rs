@@ -34,6 +34,11 @@ pub enum Request {
         settings: Settings,
         password: String,
     },
+    CheckUpdates,
+    InstallUpdate,
+    UserActivity {
+        busy: bool,
+    },
     Check,
     Login,
     Relogin,
@@ -75,6 +80,7 @@ pub struct Status {
     pub event_watch_healthy: bool,
     pub issue: Option<&'static str>,
     pub network_online: Option<bool>,
+    pub update: super::updates::View,
 }
 impl Default for Status {
     fn default() -> Self {
@@ -89,6 +95,7 @@ impl Default for Status {
             event_watch_healthy: false,
             issue: None,
             network_online: None,
+            update: super::updates::View::default(),
         }
     }
 }

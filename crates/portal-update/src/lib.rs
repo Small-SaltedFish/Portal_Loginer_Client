@@ -1,9 +1,11 @@
-//! Offline update verification. Network download and privileged installation
-//! deliberately have no execution path until signing and rollback are wired.
+//! Signed update verification and bounded GitHub/mirror downloads.
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, io::Read};
+pub mod download;
+pub mod payload;
+pub const UPDATE_PUBLIC_KEY: &[u8; 32] = include_bytes!("../../../assets/update-public-key.bin");
 pub const REPOSITORY: &str = "Small-SaltedFish/Portal_Loginer_Client";
 pub const RELEASES_URL: &str = "https://github.com/Small-SaltedFish/Portal_Loginer_Client/releases";
 pub const MAX_MANIFEST_BYTES: usize = 65536;

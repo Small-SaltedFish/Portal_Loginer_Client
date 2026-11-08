@@ -22,6 +22,7 @@ pub enum Event {
     },
     State(State),
     OnlineCheck,
+    Update(&'static str),
     Authenticated,
     ConfigSaved,
     NetworkChanged,
@@ -139,6 +140,7 @@ impl Policy {
                 self.online = 0;
                 format!("failure={failure:?}")
             }
+            Event::Update(code) => format!("update={code}"),
             Event::ConfigSaved => "config_saved".into(),
             Event::CredentialUnavailable => {
                 self.online = 0;

@@ -13,3 +13,7 @@ url.workspace = true
 ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std", "fast", "zeroize"] }
 sha2 = "=0.10.9"
 semver = "=1.0.27"
+
+reqwest.workspace = true
+tokio.workspace = true
+zip = { version = "=2.4.2", default-features = false, features = ["deflate"] }

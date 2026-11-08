@@ -20,6 +20,45 @@ use zeroize::Zeroizing;
 
 pub fn cli() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.len() == 3 && args[0] == "verify-update-package" && args[1] == "--directory" {
+        let dir = std::path::PathBuf::from(&args[2]);
+        let raw = storage::read_limited(&dir.join("update-manifest.json"), 65536)?;
+        let sig = storage::read_limited(&dir.join("update-manifest.sig"), 64)?;
+        let update = portal_update::verify_manifest(
+            &raw,
+            &sig,
+            portal_update::UPDATE_PUBLIC_KEY,
+            "0.0.0",
+            portal_update::Platform::Windows,
+            portal_update::Architecture::X86_64,
+        )
+        .map_err(|_| Error::Invalid)?
+        .ok_or(Error::Invalid)?;
+        portal_update::download::verify_file(&update, &dir.join(&update.asset().name))
+            .map_err(|_| Error::Invalid)?;
+        println!(
+            "{}",
+            serde_json::json!({"verified":true,"version":update.version().to_string(),"bytes":update.asset().size})
+        );
+        return Ok(());
+    }
+    if args.len() == 5 && args[0] == "watch-update" && args[1] == "--job" && args[3] == "--pid" {
+        return super::updates::watch(
+            &std::path::PathBuf::from(&args[2]),
+            args[4]
+                .to_str()
+                .and_then(|v| v.parse().ok())
+                .ok_or(Error::Invalid)?,
+        );
+    }
+    if args.len() == 3 && args[1] == "--job" {
+        if args[0] == "apply-update" {
+            return super::updates::apply(&std::path::PathBuf::from(&args[2]), false);
+        }
+        if args[0] == "recover-update" {
+            return super::updates::apply(&std::path::PathBuf::from(&args[2]), true);
+        }
+    }
     if args.first().and_then(|v| v.to_str()) == Some("prepare-install")
         && args.len() == 3
         && args[1] == "--directory"
@@ -408,7 +447,7 @@ fn install_for_at(owner: String, directory: Option<std::path::PathBuf>) -> Resul
 fn missing_service(error: &windows_service::Error) -> bool {
     matches!(error,windows_service::Error::Winapi(e) if matches!(e.raw_os_error(),Some(1060|1072)))
 }
-fn stop_existing() -> Result<()> {
+pub(super) fn stop_existing() -> Result<()> {
     security::require_admin()?;
     let service = match service(ServiceAccess::QUERY_STATUS | ServiceAccess::STOP) {
         Ok(s) => s,
@@ -480,12 +519,18 @@ fn purge_data() -> Result<()> {
     use std::os::windows::fs::MetadataExt;
     for entry in &entries {
         let metadata = std::fs::symlink_metadata(entry.path())?;
-        if !metadata.is_file() || metadata.file_attributes() & 0x400 != 0 {
+        if metadata.file_attributes() & 0x400 != 0
+            || !(metadata.is_file() || metadata.is_dir() && entry.file_name() == "updates")
+        {
             return Err(Error::Access);
         }
     }
     for entry in entries {
-        std::fs::remove_file(entry.path())?;
+        if entry.file_type()?.is_dir() {
+            super::updates::remove_tree(&entry.path())?;
+        } else {
+            std::fs::remove_file(entry.path())?;
+        }
     }
     std::fs::remove_dir(directory)?;
     Ok(())
@@ -558,6 +603,9 @@ fn run_service() -> Result<()> {
     let result = (|| -> Result<()> {
         let store = Store::system()?;
         store.load()?;
+        if super::updates::recover_interrupted()? {
+            return Ok(());
+        }
         let runtime = runtime::runtime()?;
         handle.set_service_status(status(ServiceState::Running, ServiceExitCode::Win32(0)))?;
         runtime.block_on(runtime::run(store, shutdown, signal))

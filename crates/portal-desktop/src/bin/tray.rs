@@ -4,6 +4,13 @@
 mod tray;
 fn main() {
     #[cfg(windows)]
+    if std::env::args().nth(1).as_deref() == Some("--wait-update") {
+        if let Some(id) = std::env::args().nth(2).and_then(|s| s.parse::<u64>().ok()) {
+            let _ = portal_desktop::platform::finish_update_restart(id);
+        }
+        return;
+    }
+    #[cfg(windows)]
     if std::env::args().any(|a| a == "--test-notification") {
         let result = portal_desktop::platform::Apartment::new().and_then(|_apartment| {
             portal_desktop::notifications::show_test()?;

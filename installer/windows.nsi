@@ -4,7 +4,7 @@ Unicode true
 !include "FileFunc.nsh"
 !include "x64.nsh"
 !ifndef VERSION
-!define VERSION "0.2.5"
+!define VERSION "0.2.6"
 !endif
 !define PRODUCT "Portal Loginer"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\PortalLoginer"
@@ -18,7 +18,7 @@ RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 ShowInstDetails show
 ShowUninstDetails show
-VIProductVersion "0.2.5.0"
+VIProductVersion "0.2.6.0"
 VIAddVersionKey /LANG=2052 "ProductName" "${PRODUCT}"
 VIAddVersionKey /LANG=2052 "FileDescription" "Portal Loginer 安装程序"
 VIAddVersionKey /LANG=2052 "FileVersion" "${VERSION}"
@@ -36,10 +36,24 @@ VIAddVersionKey /LANG=2052 "LegalCopyright" "Apache-2.0"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "SimpChinese"
+Var MaintenanceHandle
+!include "maintenance.nsh"
+!insertmacro PortalMaintenance ""
+!insertmacro PortalMaintenance "un."
+Function un.onInit
+  Call un.AcquireMaintenance
+FunctionEnd
+Function .onGUIEnd
+  Call ReleaseMaintenance
+FunctionEnd
+Function un.onGUIEnd
+  Call un.ReleaseMaintenance
+FunctionEnd
 Var OwnerSid
 Var HadPrevious
 
 Function .onInit
+  Call AcquireMaintenance
   ${IfNot} ${RunningX64}
     MessageBox MB_ICONSTOP "此版本需要 64 位 Windows。"
     Abort
@@ -147,9 +161,11 @@ Section "安装"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
   WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoModify" 1
   WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoRepair" 1
+  Call ReleaseMaintenance
 SectionEnd
 
 Section "Uninstall"
   SetRegView 64
   !insertmacro PortalCleanup "un."
+  Call un.ReleaseMaintenance
 SectionEnd

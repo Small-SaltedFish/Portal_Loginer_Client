@@ -79,6 +79,22 @@ async fn run_at(
     if let Some(cache) = stored.cache.clone() {
         engine.restore_cache(cache);
     }
+    let update_control = super::updates::Control::new(stored.settings.automatic_updates);
+    let mut update_events = update_control.state.subscribe();
+    let (update_ready_tx, mut update_ready_rx) = mpsc::channel(1);
+    #[cfg(not(test))]
+    let _update_worker = tokio::spawn(super::updates::worker(
+        Store {
+            directory: store.directory.clone(),
+        },
+        update_control.clone(),
+        update_ready_tx,
+        shutdown.clone(),
+    ));
+    #[cfg(test)]
+    drop(update_ready_tx);
+    let mut prepared_update: Option<super::updates::Ready> = None;
+    let mut update_ready_open = true;
     let mut stages = engine.subscribe();
     let events = network::Events::register(signal.clone());
     let mut status = Status {
@@ -124,6 +140,14 @@ async fn run_at(
     fallback.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     fallback.tick().await;
     loop {
+        update_control.automatic.store(
+            stored.settings.automatic_updates,
+            std::sync::atomic::Ordering::SeqCst,
+        );
+        update_control.online.store(
+            status.network_online == Some(true),
+            std::sync::atomic::Ordering::SeqCst,
+        );
         logs::configure(
             &store,
             stored.settings.log_max_bytes,
@@ -133,6 +157,18 @@ async fn run_at(
             break;
         }
         if let Some(envelope) = pending.take() {
+            if matches!(
+                envelope.request,
+                Request::CheckUpdates | Request::InstallUpdate | Request::UserActivity { .. }
+            ) {
+                match &envelope.request {
+                    Request::UserActivity { busy } => update_control.activity(*busy),
+                    Request::InstallUpdate => update_control.request(true),
+                    _ => update_control.request(false),
+                };
+                let _ = envelope.reply.send(serde_json::json!({"ok":true}));
+                continue;
+            }
             if let Request::Configure { settings, password } = &envelope.request {
                 let prepared = (|| -> Result<_> {
                     settings.core(&stored.key)?;
@@ -294,9 +330,11 @@ async fn run_at(
                         _=signal.notify.notified()=>{token.cancel();let _=step.await;dirty=true;due=tokio::time::Instant::now();status.phase="WAIT_NETWORK".into();break;},
                         Some(envelope)=commands.recv()=>{
                             if envelope.request.read_only(){let _=envelope.reply.send(ipc::query(&envelope.request,&stored,&status,&store));}
+                            else if matches!(envelope.request,Request::CheckUpdates|Request::InstallUpdate|Request::UserActivity{..}){match &envelope.request {Request::UserActivity{busy}=>update_control.activity(*busy),Request::InstallUpdate=>update_control.request(true),_=>update_control.request(false)};let _=envelope.reply.send(serde_json::json!({"ok":true}));}
                             else if matches!(envelope.request,Request::Check|Request::Relogin){let _=envelope.reply.send(ipc::failure("busy"));}
                             else {token.cancel();let _=step.await;pending=Some(envelope);break;}
                         },
+                        _=update_events.changed()=>{status.update=update_events.borrow_and_update().clone();ipc::publish(&state_sender,&stored,&status);},
                         _=stages.changed()=>{let state=*stages.borrow_and_update();update_phase(&mut status,state,&store);ipc::publish(&state_sender,&stored,&status);},
                         report=&mut step=>{
                             if signal.generation()!=generation {dirty=true;due=tokio::time::Instant::now();status.phase="WAIT_NETWORK".into();break;}
@@ -363,7 +401,7 @@ async fn run_at(
                             tokio::select! {biased;
                                 _=shutdown.cancelled()=>break None,
                                 _=signal.notify.notified()=>{dirty=true;break None},
-                                Some(command)=commands.recv()=>{if command.request.read_only(){let _=command.reply.send(ipc::query(&command.request,&stored,&status,&store));}else{pending=Some(command);break None;}},
+                                Some(command)=commands.recv()=>{if command.request.read_only(){let _=command.reply.send(ipc::query(&command.request,&stored,&status,&store));}else if matches!(command.request,Request::CheckUpdates|Request::InstallUpdate|Request::UserActivity{..}){match &command.request {Request::UserActivity{busy}=>update_control.activity(*busy),Request::InstallUpdate=>update_control.request(true),_=>update_control.request(false)};let _=command.reply.send(serde_json::json!({"ok":true}));}else{pending=Some(command);break None;}},
                                 result=&mut inspection=>break Some(result),
                             }
                         };
@@ -474,8 +512,50 @@ async fn run_at(
                 continue;
             }
         }
+        if let Ok(ready) = update_ready_rx.try_recv() {
+            prepared_update = Some(ready);
+        }
+        if let Some(ready) = &prepared_update {
+            let allowed = ready.manual
+                || stored.settings.automatic_updates
+                || update_control
+                    .force_staged
+                    .load(std::sync::atomic::Ordering::SeqCst);
+            if allowed
+                && configuration.is_none()
+                && super::uninstall::installed_directory()
+                    .ok()
+                    .flatten()
+                    .is_some_and(|dir| super::updates::can_install(&update_control, &dir))
+            {
+                update_control.show("installing", "正在静默更新，完成后托盘会恢复");
+                status.phase = "UPDATING".into();
+                status.update.phase = "installing".into();
+                status.update.message = "正在静默更新，完成后托盘会恢复".into();
+                ipc::publish(&state_sender, &stored, &status);
+                if super::updates::launch(ready).is_ok() {
+                    prepared_update = None;
+                    update_control
+                        .force_staged
+                        .store(false, std::sync::atomic::Ordering::SeqCst);
+                    tokio::select! {_=shutdown.cancelled()=>break,_=tokio::time::sleep(Duration::from_secs(25))=>{update_control.show("failed","更新进程未能接管，稍后重试");update_control.staged.store(false,std::sync::atomic::Ordering::SeqCst);update_phase(&mut status,engine.state(),&store);}}
+                } else {
+                    prepared_update = None;
+                    update_control
+                        .staged
+                        .store(false, std::sync::atomic::Ordering::SeqCst);
+                    update_control.show("failed", "无法启动更新进程，请稍后重试");
+                    update_phase(&mut status, engine.state(), &store);
+                }
+            } else {
+                update_control.show("deferred", "更新已就绪，等待设置关闭或全屏应用结束");
+            }
+        }
+        status.update = update_events.borrow_and_update().clone();
         ipc::publish(&state_sender, &stored, &status);
         tokio::select! {biased;
+            _=update_events.changed()=>{status.update=update_events.borrow_and_update().clone();},
+            ready=update_ready_rx.recv(),if prepared_update.is_none()&&update_ready_open=>{if let Some(ready)=ready {prepared_update=Some(ready);}else{update_ready_open=false;}},
             _=shutdown.cancelled()=>break,
             _=signal.notify.notified()=>{dirty=true;due=tokio::time::Instant::now();},
             _=signal.schedule.notified()=>{due=tokio::time::Instant::now();},

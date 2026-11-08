@@ -240,6 +240,73 @@ pub fn ensure_files_idle(directory: &Path, include_service: bool) -> Result<()> 
     }
     Ok(())
 }
+pub fn set_version(version: &str) -> Result<()> {
+    let Some(key) = open(HKEY_LOCAL_MACHINE, UNINSTALL_KEY, KEY_SET_VALUE)? else {
+        return Err(Error::Invalid);
+    };
+    let value = security::wide(version);
+    check(unsafe {
+        RegSetValueExW(
+            key.0,
+            security::wide("DisplayVersion").as_ptr(),
+            0,
+            REG_SZ,
+            value.as_ptr().cast(),
+            (value.len() * 2) as u32,
+        )
+    })
+}
+
+pub fn owner_proxy(sid: &str) -> Result<Option<String>> {
+    security::validate_sid(sid)?;
+    let environment = format!(r"{sid}\Environment");
+    if let Some(value) = string(HKEY_USERS, &environment, "HTTPS_PROXY")?.or(string(
+        HKEY_USERS,
+        &environment,
+        "ALL_PROXY",
+    )?) {
+        if !value.is_empty() {
+            return Ok(Some(value));
+        }
+    }
+    let path = format!(r"{sid}\Software\Microsoft\Windows\CurrentVersion\Internet Settings");
+    let mut enabled = 0u32;
+    let mut size = 4;
+    let code = unsafe {
+        RegGetValueW(
+            HKEY_USERS,
+            security::wide(&path).as_ptr(),
+            security::wide("ProxyEnable").as_ptr(),
+            RRF_RT_REG_DWORD,
+            ptr::null_mut(),
+            (&mut enabled as *mut u32).cast(),
+            &mut size,
+        )
+    };
+    if code != 0 || enabled == 0 {
+        return Ok(None);
+    }
+    let Some(value) = string(HKEY_USERS, &path, "ProxyServer")? else {
+        return Ok(None);
+    };
+    let selected = if value.contains('=') {
+        value
+            .split(';')
+            .filter_map(|v| v.split_once('='))
+            .find(|(k, _)| *k == "https")
+            .map(|(_, v)| v.to_owned())
+    } else {
+        Some(value)
+    };
+    Ok(selected.filter(|s| !s.is_empty()).map(|s| {
+        if s.contains("://") {
+            s
+        } else {
+            format!("http://{s}")
+        }
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,56 +1,42 @@
-# 自动更新接入
+# 更新与镜像下载
 
-发布源固定为 [Small-SaltedFish/Portal_Loginer_Client](https://github.com/Small-SaltedFish/Portal_Loginer_Client)。原 Portal_Loginer 是协议参照，不作为客户端更新源。
+客户端更新源固定为本仓库的 GitHub Releases。升级不改账号密码、配置、Wi-Fi 绑定和开机自启选择。
 
-## 当前已实现
+## 下载策略
 
-`portal-update` 是不依赖平台的清单及文件验证库：
+1. 优先通过正常联网路径获取 `releases/latest/download/update-manifest.json` 和原始 64 字节签名。
+2. Windows 服务读取绑定用户的系统代理及持久化 HTTPS_PROXY/ALL_PROXY；认证客户端继续显式禁用代理，两个请求路径互不共用会话。
+3. GitHub 请求失败时尝试 GHFast、ghproxy.net、GH-Proxy。镜像备用连接禁用普通 HTTP/SOCKS 代理，避免失效代理节点连带阻断备用下载；TUN/强制过滤仍由系统路由控制。
+4. 镜像使用真实更新 ZIP 的最多 64 KiB 片段测速，最多三个站点并发。校验 HTTP 状态、Range、ZIP 头，拒绝 HTML；按实际字节吞吐量排序，失败换下一条。
+5. 下载使用 Range 续传。服务端不支持 Range 时重新下载；不接受错误偏移/总长度。文件长度和 SHA-256 必须完全匹配签名清单，损坏文件清零后换线路重试。
 
-- 验证原始清单字节的 Ed25519 分离签名后才解析 JSON；清单最多 64 KiB。
-- 限定仓库、HTTPS 下载地址、版本、平台、架构及固定 ZIP 文件名。
-- 拒绝降级、非稳定版本、重复平台包、未知字段和超限包。
-- 对流式文件校验精确长度和 SHA-256，拒绝截断、额外字节及内容篡改。
-- `VerifiedUpdate` 只能由通过上述验证的清单构造。
+镜像清单来自 [GHFast](https://ghfast.top/)、[ghproxy.net](https://ghproxy.net/) 和 [GH-Proxy 使用文档](https://gh-proxy.com/docs/quick-start)。站点可用性由每次检测决定，不以静态名单保证长期可用。镜像只承担传输，无法更换客户端信任的签名公钥。
 
-运行 `cargo test -p portal-update --locked` 可验证。测试中的固定私钥仅用于合成样例，不是发布密钥。
+## 调度及安装
 
-## 发布协议
+- 正常联网后开始自动检查，随后约每天一次并加入随机偏移；失败 15 分钟后重试。关闭自动更新后只响应手动检查，发现版本后可手动下载并安装。
+- 已下载的更新等待认证事务完成、设置窗口关闭、全屏/演示状态结束。
+- 安装、卸载与更新共用互斥锁。独立更新进程在受保护目录再次验签、校验文件，并只解压固定七个文件；拒绝路径穿越、符号链接、额外文件、超限解压和非 EXE 数据。
+- 保存完整旧版文件，逐文件原子替换，服务程序最后切换。启动后验证服务实际报告的新版本；失败恢复旧版，并暂停该失败版本的自动重试，用户可明确手动重试。
+- 独立守护进程监测更新进程意外退出或挂起，恢复事务；系统重启也检查未完成事务。保留上一版备份供回退，长期只保留当前及上一事务目录。
+- 更新后只恢复当前用户托盘，不打开设置，不发送日常更新弹窗。普通升级由已授权后台完成，不重新弹 UAC。
 
-每个 Release 使用 `v<版本>` 标签，附 `update-manifest.json`、原始 64 字节 `update-manifest.sig` 和各平台专用更新 ZIP。签名覆盖清单原始 UTF-8 字节，发布后不能重新排版或换行。
+测试覆盖本地 HTTP 中断/续传、错误 Range/HTML、清单及文件篡改、ZIP 路径限制、文件切换和恢复。真实 SCM 升级、断电以及游戏全屏场景仍须实机验收；模拟测试不等同这些现场验收。
 
-清单结构：
+## 发布
 
-```json
-{
-  "schema": 1,
-  "repository": "Small-SaltedFish/Portal_Loginer_Client",
-  "version": "0.3.0",
-  "assets": [{
-    "platform": "windows",
-    "architecture": "x86_64",
-    "name": "PortalLoginer-0.3.0-windows-x86_64-update.zip",
-    "url": "https://github.com/Small-SaltedFish/Portal_Loginer_Client/releases/download/v0.3.0/PortalLoginer-0.3.0-windows-x86_64-update.zip",
-    "size": 123456,
-    "sha256": "填写对应更新包的64位十六进制摘要"
-  }]
-}
+发布签名私钥保存在本机 `.keys/update-signing.pem`，应独立备份。公钥随源码及客户端发布。私钥不进 GitHub 源码、Release、日志或更新包。本轮采用本机签名，不上传私钥到 Actions Secret，也不扩大现有 Actions 权限。
+
+```powershell
+.\scripts\dev.ps1 test
+.\scripts\dev.ps1 build
+.\scripts\package-dev.ps1 -SkipBuild
+.\scripts\package-update.ps1
+.\scripts\publish-release.ps1
+# 源码已提交且验证完成后，显式发布公开产物：
+.\scripts\publish-release.ps1 -Publish
 ```
 
-这是结构示例，不可作为真实发布清单。开发 ZIP、Setup.exe 和 Cleanup.exe 不作为此协议的更新载荷。
+Release 标签为 `v<版本>`，附安装包、清理器、专用更新 ZIP、清单与分离签名。签名覆盖清单原始字节，发布后不要重新排版或改换行。不能把开发 ZIP 作为更新载荷。
 
-## 后续接入顺序
-
-1. 生成项目发布签名密钥，独立备份私钥，将公钥编入客户端。私钥仅进入 GitHub Actions Secret，不入仓库或客户端。
-2. 增加固定文件集合的更新载荷打包和签名流程，再发布首个可更新版本。
-3. 服务每天随机分散检查一次；更新请求走用户正常网络和代理，认证请求继续直连。无网时退避。
-4. 有认证事务、游戏或全屏时推迟安装。下载、验签、文件校验完成后启动独立更新进程。
-5. 更新进程停止托盘、设置和服务，原子切换固定程序文件；保留上一个完整版本，启动失败自动恢复。普通升级由已授权的服务完成，不启动新的交互授权流程。
-6. 接入关于页、更新进度和手动检查，完成下载中断、损坏包、异常退出和回滚测试。
-
-当前没有生产发布密钥，也没有联网下载、静默安装或回滚入口，界面仍明确显示自动更新开发中。不能仅打开复选框就宣称已支持自动更新。
-
-## 构建流程
-
-- `Checks`：Linux 核心/验签测试，Windows 全部检查和测试。
-- `Build Windows packages`：手动构建未签名安装包、独立清理器和开发 ZIP，作为 Actions 附件供检查，不自动发布 Release。
-- NSIS 3.11 下载文件带固定 SHA-256；GitHub Actions 使用已核对的完整提交编号。
+旧版 0.2.5 及以前没有更新入口，需要先手动安装 0.2.6；之后才具备自动更新能力。程序未做操作系统代码签名，Ed25519 更新签名不替代系统签名。

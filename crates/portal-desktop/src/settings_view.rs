@@ -303,9 +303,7 @@ impl App {
         ui.separator();
         ui.add_space(10.0);
         ui.horizontal(|ui| {
-            let mut updates = false;
-            ui.add_enabled(false, egui::Checkbox::new(&mut updates, "自动检查更新"));
-            ui.label(RichText::new("暂不可用").small().color(MUTED));
+            ui.checkbox(&mut self.settings.automatic_updates, "自动下载并静默更新");
         });
     }
 
@@ -333,12 +331,60 @@ impl App {
                 });
                 ui.end_row();
                 ui.label("更新状态");
-                ui.label("自动更新正在开发中");
+                ui.label(if self.status.update.message.is_empty() {
+                    "等待检查更新"
+                } else {
+                    &self.status.update.message
+                });
                 ui.end_row();
+                if !self.status.update.version.is_empty() {
+                    ui.label("可用版本");
+                    ui.label(&self.status.update.version);
+                    ui.end_row();
+                }
+                if !self.status.update.source.is_empty() {
+                    ui.label("下载线路");
+                    ui.label(
+                        self.status
+                            .update
+                            .source
+                            .trim_start_matches("https://")
+                            .trim_end_matches('/'),
+                    );
+                    ui.end_row();
+                }
                 ui.label("开源许可");
                 ui.label("Apache-2.0");
                 ui.end_row();
             });
+        ui.add_space(12.0);
+        if self.status.update.total > 0 && self.status.update.phase == "downloading" {
+            ui.add(
+                egui::ProgressBar::new(
+                    (self.status.update.downloaded as f64 / self.status.update.total as f64) as f32,
+                )
+                .show_percentage(),
+            );
+        }
+        if ui
+            .add_enabled(self.loaded && !self.busy, egui::Button::new("检查更新"))
+            .clicked()
+        {
+            self.worker.send(Tag::Update, ClientRequest::CheckUpdates);
+        }
+        if matches!(
+            self.status.update.phase.as_str(),
+            "available" | "ready" | "deferred" | "failed"
+        ) && ui
+            .button(if self.status.update.phase == "failed" {
+                "重试更新"
+            } else {
+                "下载并安装"
+            })
+            .clicked()
+        {
+            self.worker.send(Tag::Update, ClientRequest::InstallUpdate);
+        }
         ui.add_space(20.0);
         ui.hyperlink_to(
             "项目主页",

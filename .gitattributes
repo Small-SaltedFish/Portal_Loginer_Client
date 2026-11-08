@@ -4,3 +4,6 @@
 *.rgba binary
 *.zip binary
 *.exe binary
+
+*.bin binary
+*.sig binary
