@@ -25,6 +25,7 @@ pub enum Event {
     Update(&'static str),
     Authenticated,
     ConfigSaved,
+    ServiceStarted,
     NetworkChanged,
     CredentialUnavailable,
     StorageFailure,
@@ -141,6 +142,11 @@ impl Policy {
                 format!("failure={failure:?}")
             }
             Event::Update(code) => format!("update={code}"),
+            Event::ServiceStarted => format!(
+                "service_started version={} pid={}",
+                env!("CARGO_PKG_VERSION"),
+                std::process::id()
+            ),
             Event::ConfigSaved => "config_saved".into(),
             Event::CredentialUnavailable => {
                 self.online = 0;

@@ -75,6 +75,7 @@ async fn run_at(
         stored.settings.log_max_bytes,
         stored.settings.debug_log,
     );
+    let _ = logs::record(&store, Event::ServiceStarted);
     let mut engine = Engine::new(stored.settings.core(&stored.key)?).map_err(|_| Error::Invalid)?;
     if let Some(cache) = stored.cache.clone() {
         engine.restore_cache(cache);
@@ -96,7 +97,7 @@ async fn run_at(
     let mut prepared_update: Option<super::updates::Ready> = None;
     let mut update_ready_open = true;
     let mut stages = engine.subscribe();
-    let events = network::Events::register(signal.clone());
+    let mut events = network::Events::register(signal.clone());
     let mut status = Status {
         event_watch_healthy: events.healthy,
         ..Status::default()
@@ -241,15 +242,14 @@ async fn run_at(
             let required = stored.settings.wifi_only.clone();
             let selected_index = stored.settings.interface_index;
             let snapshot_generation = signal.generation();
-            let snapshot = tokio::task::spawn_blocking(move || {
-                network::snapshot_for(required.as_deref(), selected_index)
+            let (snapshot, interfaces) = tokio::task::spawn_blocking(move || {
+                network::snapshot_and_interfaces(required.as_deref(), selected_index)
             })
             .await
             .map_err(|_| Error::Invalid)??;
-            if snapshot_generation != signal.generation() {
-                continue;
-            }
-            generation = signal.generation();
+            // Publish the completed snapshot even during a burst of route events.
+            // A changed epoch schedules another scan; it must not starve startup status.
+            generation = snapshot_generation;
             if previous.as_ref() != Some(&snapshot) {
                 status.network_online = None;
                 if previous
@@ -276,9 +276,13 @@ async fn run_at(
                     );
                 }
             }
+            status.interfaces = interfaces;
             status.network = Some(snapshot.clone());
             previous = Some(snapshot);
-            dirty = false;
+            dirty = generation != signal.generation();
+            if dirty {
+                status.phase = "WAIT_NETWORK".into();
+            }
             ipc::publish(&state_sender, &stored, &status);
         }
         if session_paused
@@ -287,7 +291,7 @@ async fn run_at(
         {
             due = tokio::time::Instant::now() + Duration::from_secs(60);
         }
-        if tokio::time::Instant::now() >= due {
+        if tokio::time::Instant::now() >= due && generation == signal.generation() {
             let password = if let Some((_, password)) = &configuration {
                 Ok(Some(zeroize::Zeroizing::new(password.as_bytes().to_vec())))
             } else {
@@ -564,8 +568,13 @@ async fn run_at(
                 else {pending=Some(envelope);}
             },
             _=fallback.tick()=>{
+                if !events.healthy {
+                    events = network::Events::register(signal.clone());
+                    status.event_watch_healthy = events.healthy;
+                }
                 let required=stored.settings.wifi_only.clone();let selected_index=stored.settings.interface_index;
-                let current=tokio::task::spawn_blocking(move||network::snapshot_for(required.as_deref(),selected_index)).await.map_err(|_|Error::Invalid)??;
+                let (current, interfaces)=tokio::task::spawn_blocking(move||network::snapshot_and_interfaces(required.as_deref(),selected_index)).await.map_err(|_|Error::Invalid)??;
+                status.interfaces = interfaces;
                 if previous.as_ref()!=Some(&current){signal.bump();dirty=true;due=tokio::time::Instant::now();}
             },
             _=tokio::time::sleep_until(due)=>{}

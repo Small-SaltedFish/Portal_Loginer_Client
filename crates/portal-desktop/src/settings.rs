@@ -127,6 +127,7 @@ impl App {
                         if self.status.phase == "UNAVAILABLE" || !self.loaded {
                             self.worker.send(Tag::Load, ClientRequest::GetSettings);
                         }
+                        self.interfaces = status.interfaces.clone();
                         self.status = status;
                         if self.login_pending
                             && self.login_submitted

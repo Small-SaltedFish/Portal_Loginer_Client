@@ -2916,7 +2916,7 @@ dependencies = [
 
 [[package]]
 name = "portal-core"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "aes",
  "hickory-resolver",
@@ -2936,7 +2936,7 @@ dependencies = [
 
 [[package]]
 name = "portal-desktop"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "eframe",
  "muda",
@@ -2953,7 +2953,7 @@ dependencies = [
 
 [[package]]
 name = "portal-service"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "portal-core",
  "portal-update",
@@ -2970,7 +2970,7 @@ dependencies = [
 
 [[package]]
 name = "portal-update"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "reqwest",
  "semver",

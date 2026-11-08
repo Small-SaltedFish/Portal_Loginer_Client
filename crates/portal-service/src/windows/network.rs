@@ -133,22 +133,26 @@ fn usable(ip: Ipv4Addr) -> bool {
 pub fn snapshot(required_ssid: Option<&str>) -> Result<Snapshot> {
     Ok(inventory(required_ssid)?.0)
 }
-pub fn snapshot_for(required_ssid: Option<&str>, index: Option<u32>) -> Result<Snapshot> {
+pub fn snapshot_and_interfaces(
+    required_ssid: Option<&str>,
+    index: Option<u32>,
+) -> Result<(Snapshot, Vec<Snapshot>)> {
     let (selected, all) = inventory(required_ssid)?;
-    Ok(if let Some(index) = index {
-        all.into_iter()
+    let selected = select_interface(selected, &all, index);
+    Ok((selected, all))
+}
+fn select_interface(default: Snapshot, all: &[Snapshot], index: Option<u32>) -> Snapshot {
+    match index {
+        Some(index) => all
+            .iter()
             .find(|n| n.interface_index == Some(index))
-            .unwrap_or_else(Snapshot::empty)
-    } else {
-        selected
-    })
+            .cloned()
+            .unwrap_or_else(Snapshot::empty),
+        None => default,
+    }
 }
 pub fn interfaces() -> Result<Vec<Snapshot>> {
-    Ok(inventory(None)?
-        .1
-        .into_iter()
-        .filter(|n| n.route_ready)
-        .collect())
+    Ok(inventory(None)?.1)
 }
 fn inventory(required_ssid: Option<&str>) -> Result<(Snapshot, Vec<Snapshot>)> {
     let mut length = 16 * 1024u32;
@@ -219,23 +223,20 @@ fn inventory(required_ssid: Option<&str>) -> Result<(Snapshot, Vec<Snapshot>)> {
                     }
                 }
             }
-            let Some(ip) = ip else {
-                continue;
-            };
-            let source = inet(ip);
+            let source = ip.map(inet);
             let mut route = unsafe { zeroed::<MIB_IPFORWARD_ROW2>() };
             let mut route_source = unsafe { zeroed::<SOCKADDR_INET>() };
-            let ready = unsafe {
+            let ready = source.as_ref().is_some_and(|source| unsafe {
                 GetBestRoute2(
                     &current.Luid,
                     0,
-                    &source,
+                    source,
                     &destination,
                     0,
                     &mut route,
                     &mut route_source,
                 )
-            } == 0;
+            } == 0);
             let is_wifi = current.IfType == IF_TYPE_IEEE80211;
             let wifi = if is_wifi {
                 wifi_info(&current.Luid)
@@ -264,7 +265,7 @@ fn inventory(required_ssid: Option<&str>) -> Result<(Snapshot, Vec<Snapshot>)> {
                 score,
                 Snapshot {
                     interface_index: Some(index),
-                    ipv4: Some(ip),
+                    ipv4: ip,
                     route_ready: ready,
                     is_wifi,
                     ssid: wifi.0,
@@ -461,6 +462,8 @@ impl Events {
             {
                 healthy = false;
             }
+        } else {
+            healthy = false;
         }
         Self {
             handles,
@@ -534,6 +537,35 @@ unsafe extern "system" fn wifi_changed(data: *mut L2_NOTIFICATION_DATA, context:
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn disconnected_pinned_adapter_never_selects_another_network_and_dhcp_wifi_remains_visible() {
+        let wifi = Snapshot {
+            interface_index: Some(22),
+            is_wifi: true,
+            ssid: Some("Campus".into()),
+            ..Snapshot::empty()
+        };
+        let wired = Snapshot {
+            interface_index: Some(21),
+            ipv4: Some("192.0.2.2".parse().unwrap()),
+            route_ready: true,
+            ..Snapshot::empty()
+        };
+        let all = vec![wifi.clone()];
+        assert_eq!(
+            select_interface(wifi.clone(), &all, Some(21)).interface_index,
+            None
+        );
+        assert_eq!(
+            select_interface(wired.clone(), &all, Some(22)).interface_index,
+            Some(22)
+        );
+        assert_eq!(
+            select_interface(wifi.clone(), &all, None).interface_index,
+            Some(22)
+        );
+        assert!(all[0].is_wifi && all[0].ipv4.is_none());
+    }
     #[test]
     fn native_snapshot_is_read_only_and_has_consistent_core_view() {
         let value = snapshot(None).unwrap();

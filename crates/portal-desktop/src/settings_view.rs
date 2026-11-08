@@ -64,12 +64,23 @@ fn heading(ui: &mut egui::Ui, title: &str) {
 impl App {
     fn account(&mut self, ui: &mut egui::Ui) {
         heading(ui, "校园网登录");
-        if self.interfaces.len() > 1 {
+        if !self.interfaces.is_empty() || self.settings.interface_index.is_some() {
             let previous = self.settings.interface_index;
             egui::ComboBox::from_label("认证网络出口")
                 .selected_text(
                     previous
-                        .map(|i| format!("接口 {i}"))
+                        .map(|i| {
+                            self.interfaces
+                                .iter()
+                                .find(|n| n.interface_index == Some(i))
+                                .map(|n| {
+                                    format!(
+                                        "{} · 接口 {i}",
+                                        if n.is_wifi { "Wi-Fi" } else { "有线" }
+                                    )
+                                })
+                                .unwrap_or_else(|| format!("接口 {i} 当前未连接"))
+                        })
                         .unwrap_or("跟随 Windows 默认路由".into()),
                 )
                 .show_ui(ui, |ui| {
@@ -137,11 +148,7 @@ impl App {
                     });
                 });
                 if let Some(network) = &self.status.network {
-                    let text = if network.is_wifi {
-                        format!("Wi-Fi：{}", network.ssid.as_deref().unwrap_or("名称不可读"))
-                    } else {
-                        "有线网络".into()
-                    };
+                    let text = network.label();
                     ui.label(RichText::new(text).small().color(MUTED));
                     if network.possible_tunnel_route {
                         ui.label(

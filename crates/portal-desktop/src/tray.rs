@@ -220,6 +220,10 @@ pub fn run() -> Result<(), String> {
                         }
                     }
                 }
+                Event::Reply(Tag::Start, Err(error)) => {
+                    state.set_text(model::error_text(&error));
+                    let _ = icon.set_tooltip(Some(model::error_text(&error)));
+                }
                 Event::Reply(_, Err(_)) => {
                     state.set_text("暂时无法连接后台服务");
                 }

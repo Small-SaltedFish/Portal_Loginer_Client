@@ -15,6 +15,7 @@ pub enum Tag {
     Logs,
     Confirm,
     Setup,
+    Start,
     Quit,
 }
 pub enum Event {
@@ -70,7 +71,11 @@ impl Worker {
                 }
                 // Starting is only performed at an explicit app launch, never by
                 // the reconnect watcher (which would undo an intentional exit).
-                tokio::select! {biased;_=token.cancelled()=>return,_=tokio::task::spawn_blocking(windows::start_application)=>{}}
+                let started = tokio::select! {biased;_=token.cancelled()=>return,result=tokio::task::spawn_blocking(windows::start_application)=>result};
+                if !matches!(started, Ok(Ok(()))) {
+                    let error = if matches!(started, Ok(Err(windows::Error::Access))) {"access_denied"} else {"service_start_failed"};
+                    emit(Event::Reply(Tag::Start, Err(error.into())));
+                }
                 let (status_tx,mut status_rx)=tokio::sync::mpsc::channel(8);let watcher_stop=token.clone();
                 tokio::spawn(async move {loop {
                     let _=windows::watch_events(status_tx.clone(),watcher_stop.clone()).await;

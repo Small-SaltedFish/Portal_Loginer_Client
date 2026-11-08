@@ -12,6 +12,23 @@ pub struct NetworkView {
     pub wifi_auto_connect: Option<bool>,
     pub possible_tunnel_route: bool,
 }
+impl NetworkView {
+    pub fn label(&self) -> String {
+        if self.interface_index.is_none() {
+            return "未发现可用的已连接网卡".into();
+        }
+        let kind = if self.is_wifi {
+            format!("Wi-Fi：{}", self.ssid.as_deref().unwrap_or("名称暂不可读"))
+        } else {
+            "有线网络".into()
+        };
+        if self.ipv4.is_none() {
+            format!("{kind} · 等待分配地址")
+        } else {
+            kind
+        }
+    }
+}
 #[derive(Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct StatusView {
@@ -22,6 +39,7 @@ pub struct StatusView {
     pub authentication_id: u64,
     pub failures: u32,
     pub network: Option<NetworkView>,
+    pub interfaces: Vec<NetworkView>,
     pub issue: Option<String>,
     pub last_authentication_unix: Option<u64>,
     pub update: portal_service::windows::UpdateView,
@@ -40,8 +58,15 @@ impl StatusView {
         }
     }
     pub fn label(&self) -> &'static str {
-        if self.phase == "WAIT_NETWORK" {
+        if self.phase == "WAIT_NETWORK"
+            || (self.phase == "OFFLINE"
+                && self
+                    .network
+                    .as_ref()
+                    .is_some_and(|n| n.interface_index.is_some()))
+        {
             return match self.network.as_ref() {
+                Some(n) if n.interface_index.is_none() => "未连接到任何网络",
                 Some(n) if n.ipv4.is_none() => "等待网络分配地址",
                 Some(n) if !n.route_ready => "网络已连接，等待可用路由",
                 _ => "网络变化后正在确认状态",
@@ -55,6 +80,7 @@ impl StatusView {
 }
 pub fn phase_text(phase: &str) -> &'static str {
     match phase {
+        "STARTING" => "后台已启动，正在识别网络",
         "NETWORK_ERROR" => "网络异常，请检查 TUN 等代理配置",
         "MANUAL_REQUIRED" => "当前未连接互联网，请检查代理配置，或登录参数可能已更新；需要手动操作",
         "UPDATING" => "正在静默更新",
@@ -82,6 +108,7 @@ pub fn error_text(error: &str) -> &'static str {
     match error {
         "busy" => "正在处理，请稍后重试。",
         "access_denied" => "当前 Windows 用户没有访问此服务的权限。",
+        "service_start_failed" => "后台服务未能启动，请检查服务状态或重新运行安装包修复。",
         "service_unavailable" => "后台服务未连接。",
         "credential_unavailable" => "无法读取已保存的密码，请重新输入密码后验证。",
         "operation_failed" | "invalid_settings" => "操作未完成，请检查账号、Wi-Fi 名称和高级设置。",
@@ -182,6 +209,23 @@ mod tests {
             authentication_id: id,
             ..Default::default()
         }
+    }
+    #[test]
+    fn live_inventory_changes_and_startup_are_not_mislabeled_as_wired_or_stopped() {
+        let first = serde_json::json!({"ok":true,"status":{"phase":"STARTING","interfaces":[]}});
+        let next = serde_json::json!({"ok":true,"status":{"phase":"WAIT_NETWORK","interfaces":[{"interface_index":22,"is_wifi":true,"ssid":"Campus"}],"network":{"interface_index":22,"is_wifi":true,"ssid":"Campus"}}});
+        let initial = StatusView::parse(&first).unwrap();
+        let changed = StatusView::parse(&next).unwrap();
+        assert!(initial.interfaces.is_empty());
+        assert_eq!(initial.label(), "后台已启动，正在识别网络");
+        assert_eq!(changed.interfaces.len(), 1);
+        assert!(changed.network.as_ref().unwrap().label().contains("Wi-Fi"));
+        assert!(!NetworkView::default().label().contains("有线"));
+        let removed = StatusView::parse(
+            &serde_json::json!({"ok":true,"status":{"phase":"OFFLINE","interfaces":[]}}),
+        )
+        .unwrap();
+        assert!(removed.interfaces.is_empty());
     }
     #[test]
     fn notifications_require_fresh_online_confirmation_and_deduplicate() {
