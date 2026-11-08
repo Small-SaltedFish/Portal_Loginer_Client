@@ -235,3 +235,5 @@ GitHub 首次远端检查也已通过：[Checks](https://github.com/Small-Salted
 - 使用绝对系统目录调用 schtasks，无命令解释器、隐藏窗口、10 秒截止；任务 XML 使用 UTF-16 BOM、转义路径，文件存放受保护目录。注册失败记录一次错误并保留普通启动项兜底，不阻断认证。
 - 完整 96 项本机测试、静态检查通过。Windows 任务计划程序在内存中接受实际 XML 定义，确认零延迟、普通权限、电池运行；没有注册真实任务、修改当前启动项或执行真实认证。下一次系统启动的实际耗时仍需升级后实测。
 - 按用户要求，新 Release 仅发布安装包、更新 ZIP 和各自 SHA-256，不再发布独立 Cleanup 和本地检查清单；构建中的旧残留清理组件仍保留作回归验证。
+- 最终 Windows/Linux 检查通过：https://github.com/Small-SaltedFish/Portal_Loginer_Client/actions/runs/42498711790 。最终构建和内嵌卸载器验证通过；任务计划程序在内存中接受最终 UTF-16 定义及 --scheduled-start 参数。
+- v0.2.9 已发布，仅包含安装包、更新 ZIP 和各自 SHA-256，共四个附件，GitHub 官方 digest 与本地文件逐一匹配。没有注册现场启动任务或执行用户系统重启；提速的实机效果仍需升级后冷启动验证。
