@@ -256,3 +256,5 @@ GitHub 首次远端检查也已通过：[Checks](https://github.com/Small-Salted
 - 仓库方案评估时曾提交一份约 8.6 MB ZIP 和清单，已从当前目录删除，没有重写历史。以后更新附件仅发 Release，不产生这类历史增量。
 - 旧版若因旧检查入口失败，可手动覆盖安装 0.2.11，保留账号密码。未修改系统代理或安装现场程序。
 - 最终完整 99 项本机测试、静态检查及正式构建通过。测试进程的 HTTP/HTTPS/ALL_PROXY 指向不可用端口，实际 API 镜像与文件镜像均选择 https://gh-proxy.org/，下载 v0.2.10、8,581,480 字节，SHA-256 一致；系统代理和 TUN 配置未改动。临时公开清单已按 SHA-256 确认后移除。
+- Windows/Linux 最终检查通过：https://github.com/Small-SaltedFish/Portal_Loginer_Client/actions/runs/42506172501 。0.2.11 已公开发布且仅有 Setup 和更新 ZIP，两者官方 digest 均与本地匹配。
+- 发布后原生客户端在测试进程的普通代理指向无效端口时，API 镜像成功读到 v0.2.11，文件镜像下载 8,602,554 字节 ZIP，SHA-256 校验通过，两个阶段均选择 https://gh-proxy.org/。安装包镜像读取也确认返回有效 MZ 文件头。未安装到现场或更改系统代理。
