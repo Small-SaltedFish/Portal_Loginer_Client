@@ -16,6 +16,12 @@ pub const MIRRORS: [&str; 3] = [
 pub enum Error {
     #[error("no release published")]
     NotPublished,
+    #[error("request timed out")]
+    Timeout,
+    #[error("HTTP {0}")]
+    Http(u16),
+    #[error("{0}")]
+    Mirrors(String),
     #[error("update source unavailable")]
     Network,
     #[error("update verification failed")]
@@ -31,20 +37,12 @@ pub struct Downloader {
 pub struct Release {
     pub update: VerifiedUpdate,
     pub manifest: Vec<u8>,
-    pub direct: bool,
+    pub metadata_source: String,
 }
 fn trusted_host(host: &str) -> bool {
     matches!(
         host,
-        "api.github.com"
-            | "github.com"
-            | "objects.githubusercontent.com"
-            | "release-assets.githubusercontent.com"
-            | "github-releases.githubusercontent.com"
-            | "ghfast.top"
-            | "ghproxy.net"
-            | "gh-proxy.org"
-            | "gh-proxy.com"
+        "ghfast.top" | "ghproxy.net" | "gh-proxy.org" | "gh-proxy.com"
     ) || host.ends_with(".gh-proxy.org")
         || host.ends_with(".gh-proxy.com")
 }
@@ -87,14 +85,21 @@ impl Downloader {
             .timeout(Duration::from_secs(6))
             .send()
             .await
-            .map_err(|_| Error::Network)?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    Error::Timeout
+                } else {
+                    Error::Network
+                }
+            })?;
         if response.status() == StatusCode::NOT_FOUND {
             return Err(Error::NotPublished);
         }
-        if response.status() != StatusCode::OK
-            || response.content_length().is_some_and(|n| n > max as u64)
-        {
-            return Err(Error::Network);
+        if response.status() != StatusCode::OK {
+            return Err(Error::Http(response.status().as_u16()));
+        }
+        if response.content_length().is_some_and(|n| n > max as u64) {
+            return Err(Error::Verification);
         }
         let mut out = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|_| Error::Network)? {
@@ -108,28 +113,81 @@ impl Downloader {
     pub async fn latest(&self, current: &str) -> Result<Option<Release>, Error> {
         self.latest_with_cache(current, None).await
     }
-    /// The cache must come from protected storage populated by a prior official API response.
     pub async fn latest_with_cache(
         &self,
         current: &str,
         cached: Option<&[u8]>,
     ) -> Result<Option<Release>, Error> {
-        let url = format!("https://api.github.com/repos/{REPOSITORY}/releases/latest");
-        let (raw, direct) = match self.small(&url, MAX_MANIFEST_BYTES).await {
-            Ok(raw) => (
-                crate::github_manifest(&raw).map_err(|_| Error::Verification)?,
-                true,
-            ),
-            Err(Error::NotPublished) => return Ok(None),
-            Err(_) => (cached.ok_or(Error::Network)?.to_vec(), false),
-        };
-        let update = verify_manifest(&raw, current, Platform::Windows, Architecture::X86_64)
-            .map_err(|_| Error::Verification)?;
-        Ok(update.map(|update| Release {
-            update,
-            manifest: raw,
-            direct,
-        }))
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let urls = MIRRORS.iter().map(|prefix| (prefix.to_string(), format!("{prefix}https://raw.githubusercontent.com/{REPOSITORY}/main/updates/manifest.json?check={stamp}"))).collect();
+        self.latest_from(current, cached, urls).await
+    }
+    async fn latest_from(
+        &self,
+        current: &str,
+        cached: Option<&[u8]>,
+        urls: Vec<(String, String)>,
+    ) -> Result<Option<Release>, Error> {
+        let version = crate::version(current).map_err(|_| Error::Verification)?;
+        let mut tasks = tokio::task::JoinSet::new();
+        for (source, url) in urls {
+            let mut client = self.clone();
+            client.client = client.direct.clone();
+            tasks.spawn(async move {
+                let started = Instant::now();
+                let result = async {
+                    let raw = client.small(&url, MAX_MANIFEST_BYTES).await?;
+                    let update =
+                        verify_manifest(&raw, "0.0.0", Platform::Windows, Architecture::X86_64)
+                            .map_err(|_| Error::Verification)?
+                            .ok_or(Error::Verification)?;
+                    Ok::<_, Error>((update, raw))
+                }
+                .await;
+                (source, started.elapsed(), result)
+            });
+        }
+        let mut best: Option<(VerifiedUpdate, Vec<u8>, String, Duration)> = None;
+        let mut failures = Vec::new();
+        while let Some(result) = tasks.join_next().await {
+            match result {
+                Ok((source, elapsed, Ok((update, raw)))) => {
+                    if best.as_ref().is_none_or(|(b, _, _, t)| {
+                        update.version() > b.version()
+                            || (update.version() == b.version() && elapsed < *t)
+                    }) {
+                        best = Some((update, raw, source, elapsed));
+                    }
+                }
+                Ok((source, _, Err(error))) => failures.push(format!("{source} {error}")),
+                Err(_) => failures.push("mirror task failed".into()),
+            }
+        }
+        if let Some((update, raw, source, _)) = best {
+            return Ok((update.version() > &version).then_some(Release {
+                update,
+                manifest: raw,
+                metadata_source: source,
+            }));
+        }
+        if let Some(raw) = cached {
+            if let Some(update) =
+                verify_manifest(raw, "0.0.0", Platform::Windows, Architecture::X86_64)
+                    .ok()
+                    .flatten()
+                    .filter(|v| v.version() > &version)
+            {
+                return Ok(Some(Release {
+                    update,
+                    manifest: raw.to_vec(),
+                    metadata_source: "缓存（镜像暂不可用）".into(),
+                }));
+            }
+        }
+        Err(Error::Mirrors(failures.join("; ")))
     }
     async fn sample(&self, prefix: &str, asset: &crate::Asset) -> Result<(String, f64), Error> {
         let url = format!("{prefix}{}", asset.url);
@@ -252,16 +310,6 @@ impl Downloader {
         progress: impl Fn(u64, &str) + Sync,
     ) -> Result<String, Error> {
         let asset = release.update.asset();
-        if release.direct
-            && self.sample("", asset).await.is_ok()
-            && self
-                .transfer(&asset.url, path, asset, &|n| progress(n, "github.com"))
-                .await
-                .is_ok()
-            && verify_file(&release.update, path).is_ok()
-        {
-            return Ok("github.com".into());
-        }
         if std::fs::metadata(path).is_ok_and(|m| m.len() >= asset.size) {
             std::fs::remove_file(path).map_err(|_| Error::Storage)?;
         }
@@ -335,6 +383,9 @@ mod tests {
         assert!(trusted_host("ghfast.top"));
         assert!(!trusted_host("github.com.evil.example"));
         assert!(!trusted_host("127.0.0.1"));
+        assert!(!trusted_host("github.com"));
+        assert!(!trusted_host("api.github.com"));
+        assert!(!trusted_host("raw.githubusercontent.com"));
     }
 }
 #[cfg(test)]
@@ -384,6 +435,74 @@ mod transfer_tests {
                     .unwrap()
                     .as_nanos()
             ))
+    }
+    fn metadata(version: &str) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({"schema":1,"repository":REPOSITORY,"version":version,"assets":[{"platform":"windows","architecture":"x86_64","name":format!("PortalLoginer-{version}-windows-x86_64-update.zip"),"url":format!("https://raw.githubusercontent.com/{REPOSITORY}/{}/updates/windows-x86_64.zip", "a".repeat(40)),"size":17,"sha256":"00".repeat(32)}]})).unwrap()
+    }
+    async fn metadata_server(body: Vec<u8>) -> (String, tokio::task::JoinHandle<String>) {
+        let header = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        server([header.as_bytes(), &body].concat()).await
+    }
+    #[tokio::test]
+    async fn mirror_check_selects_newest_valid_metadata_and_ignores_html_and_bad_proxy() {
+        let (old, old_task) = metadata_server(metadata("0.2.10")).await;
+        let (new, new_task) = metadata_server(metadata("0.2.11")).await;
+        let (html, html_task) = metadata_server(b"<html>blocked</html>".to_vec()).await;
+        let mut client = downloader();
+        client.client = Client::builder()
+            .proxy(reqwest::Proxy::all("http://127.0.0.1:9").unwrap())
+            .build()
+            .unwrap();
+        let value = client
+            .latest_from(
+                "0.2.9",
+                None,
+                vec![
+                    ("old".into(), old),
+                    ("new".into(), new),
+                    ("html".into(), html),
+                ],
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(value.update.version().to_string(), "0.2.11");
+        assert_eq!(value.metadata_source, "new");
+        for task in [old_task, new_task, html_task] {
+            assert!(task.await.unwrap().starts_with("GET /"));
+        }
+    }
+    #[tokio::test]
+    async fn unavailable_mirrors_report_http_error_and_only_newer_cache_can_be_used() {
+        for (cached, usable) in [
+            (None, false),
+            (Some(metadata("0.2.10")), false),
+            (Some(metadata("0.2.11")), true),
+        ] {
+            let (url, task) = server(
+                b"HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    .to_vec(),
+            )
+            .await;
+            let result = downloader()
+                .latest_from(
+                    "0.2.10",
+                    cached.as_deref(),
+                    vec![("test-mirror".into(), url)],
+                )
+                .await;
+            if usable {
+                assert!(result.unwrap().unwrap().metadata_source.contains("缓存"));
+            } else {
+                assert!(
+                    matches!(result,Err(Error::Mirrors(text)) if text.contains("test-mirror") && text.contains("503"))
+                );
+            }
+            task.await.unwrap();
+        }
     }
     #[tokio::test]
     async fn resumes_only_matching_content_range() {

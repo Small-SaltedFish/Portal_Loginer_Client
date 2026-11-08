@@ -23,6 +23,7 @@ pub enum Event {
     State(State),
     OnlineCheck,
     Update(&'static str),
+    UpdateFailure(String),
     Authenticated,
     ConfigSaved,
     ServiceStarted,
@@ -146,6 +147,7 @@ impl Policy {
                 self.online = 0;
                 format!("failure={failure:?}")
             }
+            Event::UpdateFailure(message) => format!("update_failure={message}"),
             Event::Update(code) => format!("update={code}"),
             Event::BootPolicy {
                 pause_restored,

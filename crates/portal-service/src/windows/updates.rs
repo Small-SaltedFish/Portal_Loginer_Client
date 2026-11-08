@@ -221,6 +221,7 @@ pub async fn worker(
         if recover_interrupted().unwrap_or(false) {
             return;
         }
+        let mut failure_message = None;
         let result = async {
             let path = root(&store)?;
             if journal(&path)?
@@ -228,7 +229,7 @@ pub async fn worker(
             {
                 return Err(Error::Invalid);
             }
-            control.show("checking", "正在检查更新");
+            control.show("checking", "正在通过镜像检查更新");
             let proxy = super::uninstall::owner_proxy(&owner).ok().flatten();
             let client = Downloader::with_proxy(proxy.as_deref()).map_err(|_| Error::Invalid)?;
             let cached = storage::read_limited(&path.join("release-cache.json"), 65536).ok();
@@ -238,13 +239,17 @@ pub async fn worker(
                     cached.as_ref().map(|v| v.as_slice()),
                 )
                 .await
-                .map_err(|_| Error::Invalid)?
+                .map_err(|error| {
+                    failure_message = Some(format!("镜像检查失败：{error}"));
+                    Error::Invalid
+                })?
             else {
-                control.show("current", "当前没有可用更新");
+                control.show("current", "镜像检查完成，当前没有可用更新");
                 return Ok(());
             };
             storage::atomic_write(&path, "release-cache.json", &release.manifest)?;
             control.state.send_modify(|s| {
+                s.source = release.metadata_source.clone();
                 s.version = release.update.version().to_string();
                 s.total = release.update.asset().size;
                 s.downloaded = 0;
@@ -282,7 +287,10 @@ pub async fn worker(
                     });
                 })
                 .await
-                .map_err(|_| Error::Invalid)?;
+                .map_err(|error| {
+                    failure_message = Some(format!("镜像下载失败：{error}"));
+                    Error::Invalid
+                })?;
             std::fs::rename(job.join("payload.part"), job.join("payload.zip"))?;
             std::fs::copy(std::env::current_exe()?, job.join("runner.exe"))?;
             control.state.send_modify(|s| {
@@ -308,7 +316,9 @@ pub async fn worker(
                 &store,
                 super::logs::Event::Update("check_or_download_failed"),
             );
-            control.show("failed", "更新检查或下载失败，稍后自动重试");
+            let message = failure_message.unwrap_or_else(|| "更新文件处理失败，请查看日志".into());
+            let _ = super::logs::record(&store, super::logs::Event::UpdateFailure(message.clone()));
+            control.show("failed", &message);
             Duration::from_secs(15 * 60)
         };
         if let Ok(path) = root(&store) {
