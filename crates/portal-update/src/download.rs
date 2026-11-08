@@ -14,7 +14,7 @@ pub const MIRRORS: [&str; 3] = [
 ];
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("no release published")]
+    #[error("update manifest missing (HTTP 404)")]
     NotPublished,
     #[error("request timed out")]
     Timeout,
@@ -122,7 +122,7 @@ impl Downloader {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
-        let urls = MIRRORS.iter().map(|prefix| (prefix.to_string(), format!("{prefix}https://raw.githubusercontent.com/{REPOSITORY}/main/updates/manifest.json?check={stamp}"))).collect();
+        let urls = MIRRORS.iter().map(|prefix| (prefix.to_string(), format!("{prefix}https://github.com/{REPOSITORY}/releases/latest/download/update-manifest.json?check={stamp}"))).collect();
         self.latest_from(current, cached, urls).await
     }
     async fn latest_from(
