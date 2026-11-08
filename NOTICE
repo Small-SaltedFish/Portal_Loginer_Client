@@ -1,0 +1,17 @@
+Portal Loginer desktop protocol core
+
+Protocol behavior is derived from Small-SaltedFish/Portal_Loginer, version 1.4.1,
+commit dcaffa81af551e3f259ddb1433a170aff8b840b6.
+Source: https://github.com/Small-SaltedFish/Portal_Loginer
+Original license: Apache License, Version 2.0 (see LICENSE).
+
+The desktop implementation replaces shell, curl, UCI and OpenWrt-specific
+mechanisms with Rust protocol, transport and scheduling modules. Deliberate
+behavior changes and outstanding compatibility limits are recorded in
+docs/MIGRATION.md and docs/CORE.md.
+
+fixtures/tls-test-key.pem is a generated, public test-only key for a local
+untrusted-certificate test. It is never a release signing or production key.
+
+Vendored hyper-util 0.1.21 is licensed under MIT; see vendor/hyper-util/LICENSE.
+The Windows connection binding changes are described in vendor/README.md.

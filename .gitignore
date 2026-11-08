@@ -1,0 +1,14 @@
+/.tools/
+/target/
+/dist/
+/upstream/
+*.log
+*.pdb
+
+# Local credentials and on-site diagnostics
+/.keys/
+.env
+.env.*
+credential-*.bin
+settings.json
+/docs/DEBUG-FINDINGS-*.md

@@ -1,0 +1,31 @@
+[workspace]
+members = ["crates/portal-core", "crates/portal-service", "crates/portal-desktop", "crates/portal-update"]
+resolver = "2"
+
+[workspace.package]
+version = "0.2.5"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+aes = { version = "=0.8.4", features = ["zeroize"] }
+rand = "=0.8.5"
+regex = "=1.11.1"
+reqwest = { version = "=0.12.12", default-features = false, features = ["rustls-tls", "cookies"] }
+serde = { version = "=1.0.217", features = ["derive"] }
+serde_json = "=1.0.138"
+thiserror = "=2.0.11"
+tokio = { version = "=1.43.0", features = ["rt", "macros", "time", "net", "io-util", "sync"] }
+tokio-util = { version = "=0.7.13", features = ["rt"] }
+url = "=2.5.4"
+zeroize = { version = "=1.8.1", features = ["derive"] }
+hickory-resolver = { version = "=0.24.2", default-features = false, features = ["tokio-runtime"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[patch.crates-io]
+hyper-util = { path = "vendor/hyper-util" }

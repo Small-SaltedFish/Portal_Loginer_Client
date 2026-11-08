@@ -1,0 +1,145 @@
+{
+  "repository": "https://github.com/Small-SaltedFish/Portal_Loginer",
+  "commit": "dcaffa81af551e3f259ddb1433a170aff8b840b6",
+  "version": "1.4.1",
+  "audited_on": "2026-11-08",
+  "timezone": "Asia/Shanghai",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "mode": "100644",
+      "blob": "4b376ba9137137ba2c5af887782267c2306cde80"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "blob": "74c09e968854d2cbaf62f814237b21a35db26798"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "mode": "100644",
+      "blob": "9a71851206eeb67bc995af40d5038dccf4a4174a"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "blob": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "blob": "bdf274ce9ecdf14a9b2626c69b9b3ff214e9335d"
+    },
+    {
+      "path": "TECHNICAL.md",
+      "mode": "100644",
+      "blob": "978d9ec05662f98e6b963d5d7dc3c1a8b3eb7eed"
+    },
+    {
+      "path": "build.sh",
+      "mode": "100644",
+      "blob": "e11f81f01d27f558c6f0e5f3438df4505976fcf5"
+    },
+    {
+      "path": "docs/OPENCLASH.md",
+      "mode": "100644",
+      "blob": "e2600172b941850c86dcc931465ff34903508758"
+    },
+    {
+      "path": "docs/development/REVIEW.md",
+      "mode": "100644",
+      "blob": "91daa6268340aef45e43b395f3fc77fe78ca00e6"
+    },
+    {
+      "path": "install-upgrade.sh",
+      "mode": "100644",
+      "blob": "e051ff1b30f3288456d31f4f638cca19ede22cea"
+    },
+    {
+      "path": "src/etc/config/portal_login",
+      "mode": "100644",
+      "blob": "8376cb5611d182a80473f476b637c9e89e00e690"
+    },
+    {
+      "path": "src/etc/hotplug.d/iface/99-portal-login",
+      "mode": "100644",
+      "blob": "0096d1e30f036a971acc0056bed0adef4ec69b36"
+    },
+    {
+      "path": "src/etc/init.d/portal-login",
+      "mode": "100644",
+      "blob": "d9eba6a5677d9dd7a1dd77497bfd39ce83eb1a70"
+    },
+    {
+      "path": "src/usr/bin/portal-login",
+      "mode": "100644",
+      "blob": "46161297d7d3fca30f89184821840d06a787d350"
+    },
+    {
+      "path": "src/usr/libexec/portal-login-net",
+      "mode": "100644",
+      "blob": "e8bb48f5c14d61992e0dd8954a70b7fb03c36435"
+    },
+    {
+      "path": "src/usr/libexec/rpcd/portal-login",
+      "mode": "100644",
+      "blob": "0c86b69a1648ac338797b935e578f67ae993039a"
+    },
+    {
+      "path": "src/usr/share/luci/menu.d/luci-app-portal-login.json",
+      "mode": "100644",
+      "blob": "4beaebfd7b993ba7d9bf0637ddf609470021129a"
+    },
+    {
+      "path": "src/usr/share/rpcd/acl.d/luci-app-portal-login.json",
+      "mode": "100644",
+      "blob": "a171a777b86ea1ef6ff16b604f6f6cc7155e5051"
+    },
+    {
+      "path": "src/www/luci-static/resources/view/portal-login.js",
+      "mode": "100644",
+      "blob": "21e680ee6c4047e40989ddb8aa2520fce45adb70"
+    },
+    {
+      "path": "tests/core.sh",
+      "mode": "100644",
+      "blob": "b7d35069a89aef7a37eae663884cc705e25dcf88"
+    },
+    {
+      "path": "tests/daemon.sh",
+      "mode": "100644",
+      "blob": "6cb6df6da2bc171207ed351f5bc06fffc48836f7"
+    },
+    {
+      "path": "tests/jsonfilter.cjs",
+      "mode": "100644",
+      "blob": "e107496837722428699f96d5933d548f25931b69"
+    },
+    {
+      "path": "tests/locking.sh",
+      "mode": "100644",
+      "blob": "2ba5c8d81726b6e0e7e9e961cbcd8ebf87ce0d32"
+    },
+    {
+      "path": "tests/network.sh",
+      "mode": "100644",
+      "blob": "dce7d92076a14891afeab5436a7c18070d03f0ec"
+    },
+    {
+      "path": "tests/package.sh",
+      "mode": "100644",
+      "blob": "53d85c16507718df7a2b1297a2562011f85e2723"
+    },
+    {
+      "path": "tests/probe.sh",
+      "mode": "100644",
+      "blob": "13a214b3bc33a4bf79d8d317c1b18b5e2079bcc1"
+    },
+    {
+      "path": "tests/rpc.sh",
+      "mode": "100644",
+      "blob": "9904c4a52ac2fd75885932324b563ad78ccbacdf"
+    }
+  ]
+}

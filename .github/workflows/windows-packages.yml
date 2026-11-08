@@ -1,0 +1,37 @@
+name: Build Windows packages
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install Rust and locate Windows SDK
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.85.1 --profile minimal
+          $sdk = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Directory | Sort-Object Name -Descending | Where-Object { Test-Path (Join-Path $_.FullName 'x64\rc.exe') } | Select-Object -First 1
+          if (-not $sdk) { throw 'Windows SDK resource compiler missing' }
+          Join-Path $sdk.FullName 'x64' | Out-File $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Download pinned NSIS
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory .tools/nsis-download -Force | Out-Null
+          Invoke-WebRequest 'https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11.zip/download' -OutFile .tools/nsis-download/nsis.zip
+          $expected = 'C7D27F780DDB6CFFB4730138CD1591E841F4B7EDB155856901CDF5F214394FA1'
+          if ((Get-FileHash .tools/nsis-download/nsis.zip -Algorithm SHA256).Hash -ne $expected) { throw 'NSIS archive checksum mismatch' }
+          Expand-Archive .tools/nsis-download/nsis.zip .tools/nsis-download
+      - run: cargo build --workspace --release --locked
+      - run: ./scripts/package-dev.ps1 -SkipBuild
+        shell: pwsh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: portal-loginer-windows
+          path: |
+            dist/*-Setup.exe
+            dist/*-Cleanup.exe
+            dist/*.sha256
+            dist/*-dev.zip
+          if-no-files-found: error

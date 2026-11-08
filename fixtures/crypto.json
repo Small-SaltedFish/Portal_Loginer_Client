@@ -1,0 +1,26 @@
+{
+  "key": "5a3b9f207411a8ed",
+  "prefix": "xK9z",
+  "cases": [
+    {
+      "password": "testpass",
+      "encrypted": "641f6dc4998dea040ecd7614901074fa"
+    },
+    {
+      "password": "123456789012",
+      "encrypted": "98ef37d993b236ff7f58de29397ed46b"
+    },
+    {
+      "password": "1234567890123",
+      "encrypted": "98ef37d993b236ff7f58de29397ed46bc98e2e6fb88c6b884d951191d144d958"
+    },
+    {
+      "password": "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345",
+      "encrypted": "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345"
+    },
+    {
+      "password": "1234567890123456789012345678901!",
+      "encrypted": "98ef37d993b236ff7f58de29397ed46be2a37af7977e0688c6d056ebf71a31afd71c597f04c20dbd20e16e58adbef35e"
+    }
+  ]
+}

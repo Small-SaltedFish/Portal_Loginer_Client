@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "dcaffa81af551e3f259ddb1433a170aff8b840b6",
+  "provenance": "Synthetic offline responses, no captured traffic or real credentials",
+  "current_ipv4": "10.23.45.67",
+  "redirect_statuses": [301, 302, 303, 307, 308],
+  "portal_urls": [
+    {"id":"full", "url":"http://192.168.199.200/index.html?bras=hn&clientip=10.23.45.67&wlanuserip=10.23.45.67&wlanacname=hn&clientmac=aa:bb:cc:dd:ee:ff&paip=172.16.100.200&vlan=1407.1051", "result":0, "bras":"hn", "clientip":"10.23.45.67"},
+    {"id":"fallback-fields", "url":"http://192.168.199.200/index.html?wlanacname=hn&wlanuserip=10.23.45.67", "result":0, "bras":"hn", "clientip":"10.23.45.67"},
+    {"id":"https-port", "url":"https://172.16.1.2:8443/index.html?bras=hn&clientip=10.23.45.67", "result":0, "bras":"hn", "clientip":"10.23.45.67"},
+    {"id":"public-host", "url":"https://203.0.113.10/index.html?bras=hn&clientip=10.23.45.67", "result":1},
+    {"id":"hostname", "url":"http://portal.example/index.html?bras=hn&clientip=10.23.45.67", "result":1},
+    {"id":"dhcp-changed", "url":"http://192.168.199.200/index.html?bras=hn&clientip=10.23.45.1", "result":1},
+    {"id":"missing-bras", "url":"http://192.168.199.200/index.html?clientip=10.23.45.67", "result":1},
+    {"id":"zero-port", "url":"http://192.168.199.200:0/index.html?bras=hn&clientip=10.23.45.67", "result":1},
+    {"id":"no-percent-decode", "url":"http://192.168.199.200/index.html?bras=h%6e&clientip=10.23.45.67", "result":0, "bras":"h%6e", "clientip":"10.23.45.67"},
+    {"id":"plus-rejected", "url":"http://192.168.199.200/index.html?bras=h+n&clientip=10.23.45.67", "result":1},
+    {"id":"first-nonempty-duplicate", "url":"http://192.168.199.200/index.html?bras=&bras=hn&bras=other&clientip=10.23.45.67", "result":0, "bras":"hn", "clientip":"10.23.45.67"},
+    {"id":"equals-truncated", "url":"http://192.168.199.200/index.html?bras=hn=ignored&clientip=10.23.45.67", "result":0, "bras":"hn", "clientip":"10.23.45.67"}
+  ],
+  "login_results": [
+    {"id":"ret0", "login_ret":0, "ack_ret":0, "probe_result":1, "result":0, "state":"LOGGED_IN"},
+    {"id":"ret121", "login_ret":121, "ack_ret":0, "probe_result":1, "result":0, "state":"LOGGED_IN"},
+    {"id":"ret122", "login_ret":122, "ack_ret":0, "probe_result":1, "result":0, "state":"LOGGED_IN"},
+    {"id":"ret3", "login_ret":3, "ack_ret":0, "probe_result":1, "result":0, "state":"LOGGED_IN"},
+    {"id":"string-ret", "login_ret":"121", "ack_ret":"0", "probe_result":1, "result":0, "state":"LOGGED_IN"},
+    {"id":"bad-password", "login_ret":-1, "ack_ret":0, "probe_result":1, "result":1, "state":"FAILED"},
+    {"id":"pending-unknown", "login_ret":0, "ack_ret":0, "probe_result":3, "result":2, "state":"VERIFYING"},
+    {"id":"pending-portal", "login_ret":0, "ack_ret":0, "probe_result":0, "result":2, "state":"VERIFYING"},
+    {"id":"ack-failed-online", "login_ret":0, "ack_ret":1, "probe_result":1, "result":0, "state":"LOGGED_IN"},
+    {"id":"ack-failed-unknown", "login_ret":0, "ack_ret":1, "probe_result":3, "result":1, "state":"FAILED"}
+  ],
+  "fixed_form_fields": {"authmode":"0", "pool":"0", "isp_id":"0", "pyacct":"0"},
+  "unverified": ["non-ASCII password length under target OpenWrt ash", "desktop platform behavior", "real campus authentication"]
+}
