@@ -1,11 +1,9 @@
-//! Signed update verification and bounded GitHub/mirror downloads.
-use ed25519_dalek::{Signature, VerifyingKey};
+//! Release version, origin and SHA-256 verification with bounded downloads.
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, io::Read};
 pub mod download;
 pub mod payload;
-pub const UPDATE_PUBLIC_KEY: &[u8; 32] = include_bytes!("../../../assets/update-public-key.bin");
 pub const REPOSITORY: &str = "Small-SaltedFish/Portal_Loginer_Client";
 pub const RELEASES_URL: &str = "https://github.com/Small-SaltedFish/Portal_Loginer_Client/releases";
 pub const MAX_MANIFEST_BYTES: usize = 65536;
@@ -59,10 +57,8 @@ pub struct Asset {
 }
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum Error {
-    #[error("manifest or signature exceeds limits")]
+    #[error("release metadata exceeds limits")]
     Limit,
-    #[error("update signature verification failed")]
-    Signature,
     #[error("invalid update manifest")]
     Manifest,
     #[error("update origin is not this project")]
@@ -78,7 +74,7 @@ pub enum Error {
     #[error("cannot read update payload")]
     Read,
 }
-/// Only constructed after signature, origin, version and target validation.
+/// Only constructed after origin, version and target validation.
 #[derive(Debug)]
 pub struct VerifiedUpdate {
     version: semver::Version,
@@ -134,19 +130,13 @@ fn version(value: &str) -> Result<semver::Version, Error> {
 }
 pub fn verify_manifest(
     raw: &[u8],
-    signature: &[u8],
-    public_key: &[u8; 32],
     current: &str,
     platform: Platform,
     architecture: Architecture,
 ) -> Result<Option<VerifiedUpdate>, Error> {
-    if raw.is_empty() || raw.len() > MAX_MANIFEST_BYTES || signature.len() != 64 {
+    if raw.is_empty() || raw.len() > MAX_MANIFEST_BYTES {
         return Err(Error::Limit);
     }
-    let key = VerifyingKey::from_bytes(public_key).map_err(|_| Error::Signature)?;
-    let sig = Signature::from_slice(signature).map_err(|_| Error::Signature)?;
-    key.verify_strict(raw, &sig).map_err(|_| Error::Signature)?;
-    // Authenticate the exact published UTF-8 bytes before parsing JSON.
     let manifest: Manifest = serde_json::from_slice(raw).map_err(|_| Error::Manifest)?;
     if manifest.schema != 1 || manifest.assets.is_empty() || manifest.assets.len() > 6 {
         return Err(Error::Manifest);
@@ -200,4 +190,58 @@ pub fn verify_manifest(
         return Ok(None);
     }
     selected.map(Some).ok_or(Error::UnsupportedTarget)
+}
+
+/// Parse metadata fetched exclusively over HTTPS from the fixed GitHub API endpoint.
+pub fn github_manifest(raw: &[u8]) -> Result<Vec<u8>, Error> {
+    #[derive(Deserialize)]
+    struct Release {
+        tag_name: String,
+        draft: bool,
+        prerelease: bool,
+        assets: Vec<ReleaseAsset>,
+    }
+    #[derive(Deserialize)]
+    struct ReleaseAsset {
+        name: String,
+        browser_download_url: String,
+        size: u64,
+        digest: Option<String>,
+    }
+    if raw.is_empty() || raw.len() > MAX_MANIFEST_BYTES {
+        return Err(Error::Limit);
+    }
+    let release: Release = serde_json::from_slice(raw).map_err(|_| Error::Manifest)?;
+    if release.draft || release.prerelease {
+        return Err(Error::Version);
+    }
+    let value = release.tag_name.strip_prefix('v').ok_or(Error::Version)?;
+    version(value)?;
+    let expected = format!("PortalLoginer-{value}-windows-x86_64-update.zip");
+    let mut assets = Vec::new();
+    for item in release.assets.into_iter().filter(|a| a.name == expected) {
+        let hash = item
+            .digest
+            .as_deref()
+            .and_then(|s| s.strip_prefix("sha256:"))
+            .ok_or(Error::Integrity)?;
+        digest(hash)?;
+        assets.push(Asset {
+            platform: Platform::Windows,
+            architecture: Architecture::X86_64,
+            name: item.name,
+            url: item.browser_download_url,
+            size: item.size,
+            sha256: hash.into(),
+        });
+    }
+    let manifest = Manifest {
+        schema: 1,
+        repository: REPOSITORY.into(),
+        version: value.into(),
+        assets,
+    };
+    let out = serde_json::to_vec(&manifest).map_err(|_| Error::Manifest)?;
+    verify_manifest(&out, "0.0.0", Platform::Windows, Architecture::X86_64)?;
+    Ok(out)
 }

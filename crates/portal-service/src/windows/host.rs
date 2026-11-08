@@ -23,11 +23,8 @@ pub fn cli() -> Result<()> {
     if args.len() == 3 && args[0] == "verify-update-package" && args[1] == "--directory" {
         let dir = std::path::PathBuf::from(&args[2]);
         let raw = storage::read_limited(&dir.join("update-manifest.json"), 65536)?;
-        let sig = storage::read_limited(&dir.join("update-manifest.sig"), 64)?;
         let update = portal_update::verify_manifest(
             &raw,
-            &sig,
-            portal_update::UPDATE_PUBLIC_KEY,
             "0.0.0",
             portal_update::Platform::Windows,
             portal_update::Architecture::X86_64,

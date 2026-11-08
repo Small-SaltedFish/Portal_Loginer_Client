@@ -1,6 +1,5 @@
 use crate::{
     verify_manifest, Architecture, Platform, VerifiedUpdate, MAX_MANIFEST_BYTES, REPOSITORY,
-    UPDATE_PUBLIC_KEY,
 };
 use reqwest::{Client, StatusCode};
 use std::{
@@ -15,7 +14,7 @@ pub const MIRRORS: [&str; 3] = [
 ];
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("no signed release published")]
+    #[error("no release published")]
     NotPublished,
     #[error("update source unavailable")]
     Network,
@@ -32,13 +31,13 @@ pub struct Downloader {
 pub struct Release {
     pub update: VerifiedUpdate,
     pub manifest: Vec<u8>,
-    pub signature: Vec<u8>,
     pub direct: bool,
 }
 fn trusted_host(host: &str) -> bool {
     matches!(
         host,
-        "github.com"
+        "api.github.com"
+            | "github.com"
             | "objects.githubusercontent.com"
             | "release-assets.githubusercontent.com"
             | "github-releases.githubusercontent.com"
@@ -106,63 +105,31 @@ impl Downloader {
         }
         Ok(out)
     }
-    async fn manifest_at(&self, prefix: &str, current: &str) -> Result<Option<Release>, Error> {
-        let base = format!("{prefix}https://github.com/{REPOSITORY}/releases/latest/download/");
-        let manifest_url = format!("{base}update-manifest.json");
-        let signature_url = format!("{base}update-manifest.sig");
-        let (raw, sig) = tokio::join!(
-            self.small(&manifest_url, MAX_MANIFEST_BYTES),
-            self.small(&signature_url, 64)
-        );
-        let (raw, sig) = (raw?, sig?);
-        let update = verify_manifest(
-            &raw,
-            &sig,
-            UPDATE_PUBLIC_KEY,
-            current,
-            Platform::Windows,
-            Architecture::X86_64,
-        )
-        .map_err(|_| Error::Verification)?;
+    pub async fn latest(&self, current: &str) -> Result<Option<Release>, Error> {
+        self.latest_with_cache(current, None).await
+    }
+    /// The cache must come from protected storage populated by a prior official API response.
+    pub async fn latest_with_cache(
+        &self,
+        current: &str,
+        cached: Option<&[u8]>,
+    ) -> Result<Option<Release>, Error> {
+        let url = format!("https://api.github.com/repos/{REPOSITORY}/releases/latest");
+        let (raw, direct) = match self.small(&url, MAX_MANIFEST_BYTES).await {
+            Ok(raw) => (
+                crate::github_manifest(&raw).map_err(|_| Error::Verification)?,
+                true,
+            ),
+            Err(Error::NotPublished) => return Ok(None),
+            Err(_) => (cached.ok_or(Error::Network)?.to_vec(), false),
+        };
+        let update = verify_manifest(&raw, current, Platform::Windows, Architecture::X86_64)
+            .map_err(|_| Error::Verification)?;
         Ok(update.map(|update| Release {
             update,
             manifest: raw,
-            signature: sig,
-            direct: prefix.is_empty(),
+            direct,
         }))
-    }
-    pub async fn latest(&self, current: &str) -> Result<Option<Release>, Error> {
-        match self.manifest_at("", current).await {
-            Ok(v) => return Ok(v),
-            Err(Error::NotPublished) => return Ok(None),
-            Err(_) => {}
-        }
-        let mut tasks = tokio::task::JoinSet::new();
-        for mirror in MIRRORS {
-            let mut client = self.clone();
-            client.client = client.direct.clone();
-            let version = current.to_owned();
-            tasks.spawn(async move { client.manifest_at(mirror, &version).await });
-        }
-        let mut best: Option<Release> = None;
-        let mut valid = false;
-        while let Some(Ok(result)) = tasks.join_next().await {
-            if let Ok(value) = result {
-                valid = true;
-                if let Some(value) = value {
-                    if best
-                        .as_ref()
-                        .is_none_or(|b| value.update.version() > b.update.version())
-                    {
-                        best = Some(value);
-                    }
-                }
-            }
-        }
-        if valid {
-            return Ok(best);
-        }
-        Err(Error::Network)
     }
     async fn sample(&self, prefix: &str, asset: &crate::Asset) -> Result<(String, f64), Error> {
         let url = format!("{prefix}{}", asset.url);

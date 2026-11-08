@@ -1,5 +1,3 @@
-// Fixed signing keys below are public synthetic test fixtures, never release keys.
-use ed25519_dalek::{Signer, SigningKey};
 use portal_update::*;
 use sha2::{Digest, Sha256};
 fn manifest() -> Manifest {
@@ -18,18 +16,10 @@ fn verify_raw(
     current: &str,
     platform: Platform,
 ) -> Result<Option<VerifiedUpdate>, Error> {
-    let key = SigningKey::from_bytes(&[7; 32]);
-    verify_manifest(
-        raw,
-        &key.sign(raw).to_bytes(),
-        &key.verifying_key().to_bytes(),
-        current,
-        platform,
-        Architecture::X86_64,
-    )
+    verify_manifest(raw, current, platform, Architecture::X86_64)
 }
 #[test]
-fn signed_manifest_and_payload_verify() {
+fn manifest_and_payload_verify() {
     let update = verify(&manifest()).unwrap().unwrap();
     assert_eq!(update.version().to_string(), "0.3.0");
     assert!(update.verify_payload(&b"synthetic-payload"[..]).is_ok());
@@ -40,38 +30,23 @@ fn signed_manifest_and_payload_verify() {
         .is_err());
 }
 #[test]
-fn tampering_and_wrong_public_key_are_rejected_before_parsing() {
-    let raw = serde_json::to_vec(&manifest()).unwrap();
-    let key = SigningKey::from_bytes(&[7; 32]);
-    let sig = key.sign(&raw).to_bytes();
-    let wrong = SigningKey::from_bytes(&[8; 32]);
-    assert!(matches!(
-        verify_manifest(
-            &raw,
-            &sig,
-            &wrong.verifying_key().to_bytes(),
-            "0.2.5",
-            Platform::Windows,
-            Architecture::X86_64
-        ),
-        Err(Error::Signature)
-    ));
-    let mut edited = raw.clone();
-    edited[0] = b'[';
-    assert!(matches!(
-        verify_manifest(
-            &edited,
-            &sig,
-            &key.verifying_key().to_bytes(),
-            "0.2.5",
-            Platform::Windows,
-            Architecture::X86_64
-        ),
-        Err(Error::Signature)
-    ));
+fn github_metadata_requires_stable_release_and_sha256() {
+    let m = manifest();
+    let a = &m.assets[0];
+    let mut raw = serde_json::json!({"tag_name":"v0.3.0", "draft":false, "prerelease":false,
+      "assets":[{"name":a.name,"browser_download_url":a.url,"size":a.size,"digest":format!("sha256:{}",a.sha256)}]});
+    assert!(github_manifest(&serde_json::to_vec(&raw).unwrap()).is_ok());
+    raw["assets"][0]["digest"] = serde_json::Value::Null;
+    assert!(github_manifest(&serde_json::to_vec(&raw).unwrap()).is_err());
+    raw["assets"][0]["digest"] = serde_json::json!(format!("sha256:{}", a.sha256));
+    raw["prerelease"] = serde_json::json!(true);
+    assert!(github_manifest(&serde_json::to_vec(&raw).unwrap()).is_err());
+    raw["prerelease"] = serde_json::json!(false);
+    raw["assets"][0]["browser_download_url"] = serde_json::json!("https://evil.example/update.zip");
+    assert!(github_manifest(&serde_json::to_vec(&raw).unwrap()).is_err());
 }
 #[test]
-fn signed_foreign_repository_and_url_are_rejected() {
+fn foreign_repository_and_url_are_rejected() {
     let mut v = manifest();
     v.repository = "someone/other".into();
     assert!(matches!(verify(&v), Err(Error::Origin)));

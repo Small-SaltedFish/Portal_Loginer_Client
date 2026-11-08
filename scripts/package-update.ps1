@@ -18,6 +18,6 @@ Compress-Archive -LiteralPath $taskFiles -DestinationPath $taskPayload -Force
 $taskManifest=[ordered]@{schema=1;repository='Small-SaltedFish/Portal_Loginer_Client';version=$Version;assets=@([ordered]@{platform='windows';architecture='x86_64';name=$taskName;url="https://github.com/Small-SaltedFish/Portal_Loginer_Client/releases/download/v$Version/$taskName";size=(Get-Item $taskPayload).Length;sha256=(Get-FileHash $taskPayload -Algorithm SHA256).Hash.ToLowerInvariant()})}
 $taskManifestPath=Join-Path $taskRoot 'dist/update-manifest.json'
 [IO.File]::WriteAllText($taskManifestPath,($taskManifest|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
-& node (Join-Path $PSScriptRoot 'sign-update.cjs') $taskManifestPath (Join-Path $taskRoot 'dist/update-manifest.sig')
-if($LASTEXITCODE -ne 0){throw 'Manifest signing failed'}
+$taskHash=(Get-FileHash $taskPayload -Algorithm SHA256).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText("$taskPayload.sha256", "$taskHash  $taskName`n", [Text.UTF8Encoding]::new($false))
 Get-Item $taskPayload,$taskManifestPath | Select-Object Name,Length

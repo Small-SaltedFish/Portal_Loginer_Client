@@ -3,9 +3,7 @@ use super::{
     storage::{self, Store},
     Error, Result,
 };
-use portal_update::{
-    download::Downloader, payload::FILES, Architecture, Platform, UPDATE_PUBLIC_KEY,
-};
+use portal_update::{download::Downloader, payload::FILES, Architecture, Platform};
 use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
@@ -233,14 +231,19 @@ pub async fn worker(
             control.show("checking", "正在检查更新");
             let proxy = super::uninstall::owner_proxy(&owner).ok().flatten();
             let client = Downloader::with_proxy(proxy.as_deref()).map_err(|_| Error::Invalid)?;
+            let cached = storage::read_limited(&path.join("release-cache.json"), 65536).ok();
             let Some(release) = client
-                .latest(env!("CARGO_PKG_VERSION"))
+                .latest_with_cache(
+                    env!("CARGO_PKG_VERSION"),
+                    cached.as_ref().map(|v| v.as_slice()),
+                )
                 .await
                 .map_err(|_| Error::Invalid)?
             else {
                 control.show("current", "当前没有可用更新");
                 return Ok(());
             };
+            storage::atomic_write(&path, "release-cache.json", &release.manifest)?;
             control.state.send_modify(|s| {
                 s.version = release.update.version().to_string();
                 s.total = release.update.asset().size;
@@ -269,7 +272,6 @@ pub async fn worker(
             }
             security::secure_directory(&job)?;
             storage::atomic_write(&job, "manifest.json", &release.manifest)?;
-            storage::atomic_write(&job, "manifest.sig", &release.signature)?;
             control.show("downloading", "正在下载更新");
             let state = control.state.clone();
             let source = client
@@ -401,11 +403,8 @@ pub fn apply(job: &Path, recover: bool) -> Result<()> {
         return rollback(&install, job, &path, &mut j);
     }
     let raw = storage::read_limited(&job.join("manifest.json"), 65536)?;
-    let sig = storage::read_limited(&job.join("manifest.sig"), 64)?;
     let update = portal_update::verify_manifest(
         &raw,
-        &sig,
-        UPDATE_PUBLIC_KEY,
         env!("CARGO_PKG_VERSION"),
         Platform::Windows,
         Architecture::X86_64,
