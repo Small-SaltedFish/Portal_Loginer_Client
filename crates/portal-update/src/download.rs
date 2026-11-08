@@ -370,13 +370,15 @@ mod transfer_tests {
         }
     }
     fn file() -> std::path::PathBuf {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../target")
             .canonicalize()
             .unwrap()
             .join(format!(
-                "resume-test-{}-{}",
+                "resume-test-{}-{}-{}",
                 std::process::id(),
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
