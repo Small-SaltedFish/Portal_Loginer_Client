@@ -258,18 +258,22 @@ pub fn set_tray_autostart(enabled: bool) -> Result<(), String> {
         "TrayPreference",
         "set",
     )?;
-    if enabled {
-        let path = sibling("portal-tray.exe")?;
-        set_reg_string(RUN_KEY, "PortalLoginer", &format!("\"{}\"", path.display()))
-    } else {
-        let key = reg_key(RUN_KEY, true)?;
-        let result = unsafe { RegDeleteValueW(key.0, wide("PortalLoginer").as_ptr()) };
-        if result != 0 && result != ERROR_FILE_NOT_FOUND {
-            return Err("无法修改登录启动项。".into());
-        }
-        Ok(())
+    // The service owns the zero-delay task and the Run fallback. Do not recreate
+    // a delayed Run entry after a successful task registration.
+    if !enabled {
+        remove_legacy_startup()?;
     }
+    Ok(())
 }
+pub fn remove_legacy_startup() -> Result<(), String> {
+    let key = reg_key(RUN_KEY, true)?;
+    let result = unsafe { RegDeleteValueW(key.0, wide("PortalLoginer").as_ptr()) };
+    if result != 0 && result != ERROR_FILE_NOT_FOUND {
+        return Err("无法修改登录启动项。".into());
+    }
+    Ok(())
+}
+
 fn known_folder(id: &windows_sys::core::GUID) -> Result<PathBuf, String> {
     let mut value = ptr::null_mut();
     if unsafe { SHGetKnownFolderPath(id, 0, ptr::null_mut(), &mut value) } < 0 {

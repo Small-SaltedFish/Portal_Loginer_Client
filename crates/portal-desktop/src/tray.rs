@@ -20,6 +20,9 @@ enum Input {
 pub fn run() -> Result<(), String> {
     let preview = std::env::args().any(|arg| arg == "--preview");
     let smoke = std::env::args().any(|arg| arg == "--smoke-test");
+    if std::env::args().any(|arg| arg == "--scheduled-start") {
+        let _ = platform::remove_legacy_startup();
+    }
     if !preview && !smoke && platform::maintenance_busy() {
         platform::wait_and_restart_tray(0)?;
         return Ok(());
