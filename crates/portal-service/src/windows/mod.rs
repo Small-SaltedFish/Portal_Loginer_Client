@@ -5,6 +5,7 @@ mod network;
 mod runtime;
 mod security;
 mod settings;
+mod startup;
 mod storage;
 
 use std::io;

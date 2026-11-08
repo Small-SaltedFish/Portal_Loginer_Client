@@ -27,6 +27,6 @@
 
 依次运行 dev.ps1 test、dev.ps1 build、package-dev.ps1 -SkipBuild、package-update.ps1 和 publish-release.ps1。提交源码后使用 publish-release.ps1 -Publish 发布。
 
-Release 标签为 v<版本>，包含安装包、清理器、专用更新 ZIP、SHA-256 文件及本地检查清单。客户端直接读取官方 Release 接口，不依赖清单附件或签名文件。不能将开发 ZIP 用作更新载荷。
+Release 标签为 v<版本>，自 0.2.9 起仅发布安装包、专用更新 ZIP 和各自的 SHA-256 文件；本地检查清单不上传。独立 Cleanup 不再随新 Release 发布，正常卸载使用 Windows 已安装应用中的内置卸载器。客户端直接读取官方 Release 接口，不依赖清单附件或签名文件。不能将开发 ZIP 用作更新载荷。
 
 0.2.5 及以前需先手动安装 0.2.6，此后才具备自动更新能力。程序暂未做操作系统代码签名。

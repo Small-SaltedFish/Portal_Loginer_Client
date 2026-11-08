@@ -314,7 +314,12 @@ pub(super) fn set_autostart(enabled: bool) -> Result<()> {
     } else {
         ServiceStartType::OnDemand
     };
-    service(ServiceAccess::CHANGE_CONFIG)?.change_config(&info)?;
+    let service = service(ServiceAccess::CHANGE_CONFIG)?;
+    service.change_config(&info)?;
+    service.set_delayed_auto_start(false)?;
+    if super::startup::refresh_saved().is_err() {
+        let _ = super::logs::record(&Store::system()?, super::logs::Event::StartupTaskFailed);
+    }
     Ok(())
 }
 pub(super) fn start_application() -> Result<()> {
@@ -501,6 +506,7 @@ fn uninstall_clean(directory: &std::path::Path) -> Result<()> {
         .map(|s| s.owner_sid)
         .or(super::uninstall::remembered_owner()?)
         .unwrap_or(security::current_sid()?);
+    super::startup::configure(&owner, directory, false)?;
     super::uninstall::remove_owner_settings(&owner)?;
     uninstall()?;
     purge_data()

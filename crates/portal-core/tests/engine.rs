@@ -891,3 +891,30 @@ async fn desktop_login_reports_existing_internet_without_faking_new_authenticati
     assert!(!report.authenticated);
     assert_eq!(mock.count(), 2);
 }
+
+#[tokio::test(start_paused = true)]
+async fn desktop_starts_automatically_after_one_stable_second_without_changing_upstream_wait() {
+    for (desktop, delay) in [(true, 1), (false, 10)] {
+        let config = Config {
+            desktop_policy: desktop,
+            ..Config::default()
+        };
+        let mut engine = Engine::new(config).unwrap();
+        let mock = Mock::new(vec![online()]);
+        let report = run(&mut engine, &mock, &network(), Trigger::Automatic).await;
+        assert_eq!(report.state, State::WaitNetwork);
+        assert_eq!(
+            report.retry_after,
+            Some(Duration::from_secs(if desktop { 1 } else { 3 }))
+        );
+        assert_eq!(mock.count(), 0);
+        tokio::time::advance(Duration::from_secs(delay)).await;
+        assert_eq!(
+            run(&mut engine, &mock, &network(), Trigger::Automatic)
+                .await
+                .state,
+            State::LoggedIn
+        );
+        assert_eq!(mock.count(), 1);
+    }
+}

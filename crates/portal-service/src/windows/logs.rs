@@ -26,6 +26,7 @@ pub enum Event {
     Authenticated,
     ConfigSaved,
     ServiceStarted,
+    StartupTaskFailed,
     BootPolicy {
         pause_restored: bool,
         expired_pause: bool,
@@ -152,6 +153,7 @@ impl Policy {
             } => {
                 format!("boot_policy pause_restored={pause_restored} expired_pause={expired_pause}")
             }
+            Event::StartupTaskFailed => "startup_task_failed".into(),
             Event::ServiceStarted => format!(
                 "service_started version={} pid={}",
                 env!("CARGO_PKG_VERSION"),

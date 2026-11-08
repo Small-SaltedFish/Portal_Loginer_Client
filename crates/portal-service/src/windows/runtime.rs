@@ -117,6 +117,16 @@ async fn run_at(
         ipc_shutdown.cancel();
         result
     });
+    #[cfg(not(test))]
+    {
+        let _startup_task = tokio::task::spawn_blocking(move || {
+            if super::startup::refresh_saved().is_err() {
+                if let Ok(store) = Store::system() {
+                    let _ = logs::record(&store, Event::StartupTaskFailed);
+                }
+            }
+        });
+    }
     let mut transport = Adapter(None, store.directory.clone());
     let mut previous: Option<Snapshot> = None;
     let mut generation = 0;

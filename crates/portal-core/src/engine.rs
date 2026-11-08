@@ -232,18 +232,24 @@ impl Engine {
                 None,
             );
         }
-        if matches!(trigger, Trigger::Automatic | Trigger::BootRelogin)
-            && self
-                .stable_since
-                .is_some_and(|since| now.saturating_duration_since(since) < Duration::from_secs(10))
-        {
-            return self.report(
-                State::WaitNetwork,
-                Some(Duration::from_secs(3)),
-                None,
-                false,
-                None,
-            );
+        let stability = Duration::from_secs(if self.config.desktop_policy { 1 } else { 10 });
+        if matches!(trigger, Trigger::Automatic | Trigger::BootRelogin) {
+            if let Some(since) = self.stable_since {
+                let elapsed = now.saturating_duration_since(since);
+                if elapsed < stability {
+                    return self.report(
+                        State::WaitNetwork,
+                        Some(if self.config.desktop_policy {
+                            stability - elapsed
+                        } else {
+                            Duration::from_secs(3)
+                        }),
+                        None,
+                        false,
+                        None,
+                    );
+                }
+            }
         }
         self.state.send_replace(State::Checking);
         let scheduled_attempt = AtomicBool::new(false);
