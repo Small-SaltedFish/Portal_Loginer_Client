@@ -275,8 +275,9 @@ impl App {
                         }
                         Tag::Logs => {
                             self.logs = format!(
-                                "{}\n通知：{}",
+                                "{}\n托盘启动记录：\n{}\n通知：{}",
                                 value["lines"].as_str().unwrap_or(""),
+                                platform::tray_diagnostics(),
                                 portal_desktop::notifications::diagnostic()
                             );
                             self.busy = false;

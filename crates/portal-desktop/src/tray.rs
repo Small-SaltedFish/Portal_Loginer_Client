@@ -9,7 +9,6 @@ use std::{
     mem::zeroed,
     ptr,
     sync::{mpsc, Arc},
-    time::Instant,
 };
 use tray_icon::{Icon, MouseButton, TrayIconBuilder, TrayIconEvent};
 use windows_sys::Win32::{System::Threading::GetCurrentThreadId, UI::WindowsAndMessaging::*};
@@ -22,7 +21,6 @@ pub fn run() -> Result<(), String> {
     let smoke = std::env::args().any(|arg| arg == "--smoke-test");
     if std::env::args().any(|arg| arg == "--scheduled-start") {
         let _ = platform::remove_legacy_startup();
-        platform::wait_for_tray_host();
     }
     if !preview && !smoke && platform::maintenance_busy() {
         platform::wait_and_restart_tray(0)?;
@@ -39,6 +37,10 @@ pub fn run() -> Result<(), String> {
     else {
         return Ok(());
     };
+    if !preview && !smoke {
+        platform::tray_diagnostic("tray_starting");
+        platform::wait_for_tray_host();
+    }
     let _apartment = platform::Apartment::new()?;
     if !preview && !smoke {
         let _ = notifications::initialize();
@@ -93,13 +95,33 @@ pub fn run() -> Result<(), String> {
         &quit,
     ])
     .map_err(|_| "无法创建托盘菜单。".to_owned())?;
-    let icon = TrayIconBuilder::new()
-        .with_menu(Box::new(menu))
-        .with_tooltip("Portal Loginer · 等待后台服务")
-        .with_icon(Icon::from_rgba(model::icon_rgba(false), 32, 32).map_err(|_| "无法创建图标。")?)
-        .with_menu_on_left_click(false)
-        .build()
-        .map_err(|_| "无法启动托盘图标。".to_owned())?;
+    let mut attempts = 0;
+    let icon = platform::retry_with_messages(
+        std::time::Duration::from_secs(15),
+        std::time::Duration::from_millis(250),
+        || {
+            attempts += 1;
+            let result = TrayIconBuilder::new()
+                .with_menu(Box::new(menu.clone()))
+                .with_tooltip("Portal Loginer · 等待后台服务")
+                .with_icon(
+                    Icon::from_rgba(model::icon_rgba(false), 32, 32)
+                        .map_err(|_| "无法创建图标。")?,
+                )
+                .with_menu_on_left_click(false)
+                .build()
+                .map_err(|e| format!("无法启动托盘图标：{e}"));
+            if !preview && !smoke && attempts == 1 {
+                if let Err(error) = &result {
+                    platform::tray_diagnostic(&format!("icon_create_failed {error}"));
+                }
+            }
+            result
+        },
+    )?;
+    if !preview && !smoke {
+        platform::tray_diagnostic(&format!("tray_started attempts={attempts}"));
+    }
     let worker = Worker::new(wake, preview);
     let mut exiting = false;
     let mut last_online = false;
@@ -116,12 +138,11 @@ pub fn run() -> Result<(), String> {
         },
     );
     let activity_timer = unsafe { SetTimer(ptr::null_mut(), 0, 30000, None) };
-    let started = Instant::now();
-    if smoke {
-        unsafe {
-            SetTimer(ptr::null_mut(), 1, 12000, None);
-        }
-    }
+    let smoke_timer = if smoke {
+        unsafe { SetTimer(ptr::null_mut(), 0, 12000, None) }
+    } else {
+        0
+    };
     'running: loop {
         let result = unsafe { GetMessageW(&mut message, ptr::null_mut(), 0, 0) };
         if result <= 0 {
@@ -131,7 +152,7 @@ pub fn run() -> Result<(), String> {
             TranslateMessage(&message);
             DispatchMessageW(&message);
         }
-        if smoke && started.elapsed().as_secs() >= 12 {
+        if smoke && message.message == WM_TIMER && message.wParam == smoke_timer {
             break;
         }
         if message.message == WM_TIMER && message.wParam == activity_timer {
@@ -277,7 +298,7 @@ pub fn run() -> Result<(), String> {
     }
     if smoke {
         unsafe {
-            KillTimer(ptr::null_mut(), 1);
+            KillTimer(ptr::null_mut(), smoke_timer);
         }
     }
     drop(icon);

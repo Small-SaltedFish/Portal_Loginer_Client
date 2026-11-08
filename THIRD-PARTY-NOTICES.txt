@@ -19,3 +19,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+Local tray-icon 0.19.2 patch: Windows notification data cbSize initialization and failed-registration window cleanup. Upstream archive SHA-256 d48a05076dd272615d03033bf04f480199f7d1b66a8ac64d75c625fc4a70c06b. Licensed Apache-2.0 OR MIT; complete notices are retained in vendor/tray-icon.

@@ -3,7 +3,7 @@ members = ["crates/portal-core", "crates/portal-service", "crates/portal-desktop
 resolver = "2"
 
 [workspace.package]
-version = "0.2.9"
+version = "0.2.10"
 edition = "2021"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -29,3 +29,4 @@ strip = true
 
 [patch.crates-io]
 hyper-util = { path = "vendor/hyper-util" }
+tray-icon = { path = "vendor/tray-icon" }

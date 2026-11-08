@@ -26,6 +26,8 @@ fn main() {
     }
     #[cfg(windows)]
     if let Err(error) = tray::run() {
+        portal_desktop::platform::tray_diagnostic(&format!("tray_failed {error}"));
         portal_desktop::platform::show_error(&error);
+        std::process::exit(1);
     }
 }

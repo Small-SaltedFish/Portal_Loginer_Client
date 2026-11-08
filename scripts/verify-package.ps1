@@ -10,8 +10,8 @@ foreach($taskName in @('portal-service.exe','portal-settings.exe','portal-tray.e
  $taskHash=(Get-FileHash "target/release/$taskName").Hash
  if($taskHash -ne (Get-FileHash "dist/windows-x86_64-dev/$taskName").Hash){throw "Stale staging file: $taskName"}
 }
-$taskAudit=Join-Path $taskRoot 'target/installer-audit-0.2.9'
-& 7z.exe x '-y' "-o$taskAudit" 'dist/PortalLoginer-0.2.9-Setup.exe' | Out-Null
+$taskAudit=Join-Path $taskRoot 'target/installer-audit-0.2.10'
+& 7z.exe x '-y' "-o$taskAudit" 'dist/PortalLoginer-0.2.10-Setup.exe' | Out-Null
 if($LASTEXITCODE -ne 0){throw 'Installer extraction failed'}
 foreach($taskName in @('portal-service.exe','portal-settings.exe','portal-tray.exe')) {
  $taskExpected=(Get-FileHash "target/release/$taskName").Hash
@@ -20,7 +20,7 @@ foreach($taskName in @('portal-service.exe','portal-settings.exe','portal-tray.e
  Write-Output "$taskName installer SHA256 matched"
 }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$taskZip=[IO.Compression.ZipFile]::OpenRead((Join-Path $taskRoot 'dist/PortalLoginer-0.2.9-windows-x86_64-dev.zip'))
+$taskZip=[IO.Compression.ZipFile]::OpenRead((Join-Path $taskRoot 'dist/PortalLoginer-0.2.10-windows-x86_64-dev.zip'))
 try {
  foreach($taskEntry in $taskZip.Entries){
   $taskSource=Join-Path $taskRoot "dist/windows-x86_64-dev/$($taskEntry.FullName)"
@@ -29,11 +29,11 @@ try {
  }
  Write-Output "ZIP entries matched: $($taskZip.Entries.Count)"
 }finally{$taskZip.Dispose()}
-$taskExpectedSetup=(Get-Content 'dist/PortalLoginer-0.2.9-Setup.exe.sha256').Split(' ')[0]
-if($taskExpectedSetup -ne (Get-FileHash 'dist/PortalLoginer-0.2.9-Setup.exe').Hash){throw 'Setup checksum mismatch'}
+$taskExpectedSetup=(Get-Content 'dist/PortalLoginer-0.2.10-Setup.exe.sha256').Split(' ')[0]
+if($taskExpectedSetup -ne (Get-FileHash 'dist/PortalLoginer-0.2.10-Setup.exe').Hash){throw 'Setup checksum mismatch'}
 Write-Output 'Setup checksum matched'
 # Verify cleanup code is usable even when all installed application files are gone.
-foreach($taskPair in @(@('dist/PortalLoginer-0.2.9-Cleanup.exe','target/cleanup-audit-0.2.9'),@('target/installer-audit-0.2.9/Uninstall.exe','target/uninstaller-audit-0.2.9'))) {
+foreach($taskPair in @(@('dist/PortalLoginer-0.2.10-Cleanup.exe','target/cleanup-audit-0.2.10'),@('target/installer-audit-0.2.10/Uninstall.exe','target/uninstaller-audit-0.2.10'))) {
  $taskEmbeddedAudit=Join-Path $taskRoot $taskPair[1]
  & 7z.exe x '-y' "-o$taskEmbeddedAudit" (Join-Path $taskRoot $taskPair[0]) | Out-Null
  if($LASTEXITCODE -ne 0){throw 'Embedded cleanup extraction failed'}
@@ -42,5 +42,5 @@ foreach($taskPair in @(@('dist/PortalLoginer-0.2.9-Cleanup.exe','target/cleanup-
  if((Get-FileHash $taskEmbedded.FullName).Hash -ne (Get-FileHash (Join-Path $taskRoot 'target/release/portal-service.exe')).Hash){throw 'Embedded cleanup helper mismatch'}
  Write-Output "$($taskPair[0]) contains matching cleanup helper"
 }
-$taskExpectedCleanup=(Get-Content (Join-Path $taskRoot 'dist/PortalLoginer-0.2.9-Cleanup.exe.sha256')).Split(' ')[0]
-if($taskExpectedCleanup -ne (Get-FileHash (Join-Path $taskRoot 'dist/PortalLoginer-0.2.9-Cleanup.exe')).Hash){throw 'Cleanup checksum mismatch'}
+$taskExpectedCleanup=(Get-Content (Join-Path $taskRoot 'dist/PortalLoginer-0.2.10-Cleanup.exe.sha256')).Split(' ')[0]
+if($taskExpectedCleanup -ne (Get-FileHash (Join-Path $taskRoot 'dist/PortalLoginer-0.2.10-Cleanup.exe')).Hash){throw 'Cleanup checksum mismatch'}

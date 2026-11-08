@@ -70,46 +70,14 @@ fn run(arguments: &[&std::ffi::OsStr]) -> Result<bool> {
         std::thread::sleep(Duration::from_millis(50));
     }
 }
-fn legacy_entry(owner: &str, directory: &Path, fallback: bool) -> Result<()> {
+fn remove_legacy_entry(owner: &str) -> Result<()> {
     use windows_sys::Win32::System::Registry::*;
     security::validate_sid(owner)?;
-    let key_path = security::wide(format!(
+    let path = security::wide(format!(
         r"{owner}\Software\Microsoft\Windows\CurrentVersion\Run"
     ));
     let mut key = std::ptr::null_mut();
-    let mut code =
-        unsafe { RegOpenKeyExW(HKEY_USERS, key_path.as_ptr(), 0, KEY_SET_VALUE, &mut key) };
-    if code == 2 && fallback {
-        let mut hive = std::ptr::null_mut();
-        let sid = security::wide(owner);
-        let opened =
-            unsafe { RegOpenKeyExW(HKEY_USERS, sid.as_ptr(), 0, KEY_CREATE_SUB_KEY, &mut hive) };
-        if opened == 2 {
-            return Ok(());
-        }
-        if opened != 0 {
-            return Err(Error::Access);
-        }
-        let relative = security::wide(r"Software\Microsoft\Windows\CurrentVersion\Run");
-        code = unsafe {
-            RegCreateKeyExW(
-                hive,
-                relative.as_ptr(),
-                0,
-                std::ptr::null(),
-                0,
-                KEY_SET_VALUE,
-                std::ptr::null(),
-                &mut key,
-                std::ptr::null_mut(),
-            )
-        };
-        unsafe {
-            RegCloseKey(hive);
-        }
-    }
-    // The owner hive can be unavailable before logon. A scheduled tray also
-    // removes the legacy entry once that user's hive is loaded.
+    let code = unsafe { RegOpenKeyExW(HKEY_USERS, path.as_ptr(), 0, KEY_SET_VALUE, &mut key) };
     if code == 2 {
         return Ok(());
     }
@@ -117,28 +85,11 @@ fn legacy_entry(owner: &str, directory: &Path, fallback: bool) -> Result<()> {
         return Err(Error::Access);
     }
     let name = security::wide("PortalLoginer");
-    let result = if fallback {
-        let command = security::wide(format!(
-            "\"{}\"",
-            directory.join("portal-tray.exe").display()
-        ));
-        unsafe {
-            RegSetValueExW(
-                key,
-                name.as_ptr(),
-                0,
-                REG_SZ,
-                command.as_ptr().cast(),
-                (command.len() * 2) as u32,
-            )
-        }
-    } else {
-        unsafe { RegDeleteValueW(key, name.as_ptr()) }
-    };
+    let result = unsafe { RegDeleteValueW(key, name.as_ptr()) };
     unsafe {
         RegCloseKey(key);
     }
-    if result == 0 || (!fallback && result == 2) {
+    if result == 0 || result == 2 {
         Ok(())
     } else {
         Err(Error::Access)
@@ -149,21 +100,15 @@ pub fn refresh_saved() -> Result<()> {
     let _lock = TASK_LOCK.lock().map_err(|_| Error::Invalid)?;
     let stored = storage::Store::system()?.load()?;
     if let Some(directory) = super::uninstall::installed_directory()? {
-        let result = configure_inner(&stored.owner_sid, &directory, stored.settings.autostart);
-        legacy_entry(
-            &stored.owner_sid,
-            &directory,
-            stored.settings.autostart && result.is_err(),
-        )?;
-        result?;
+        remove_legacy_entry(&stored.owner_sid)?;
+        configure_inner(&stored.owner_sid, &directory, stored.settings.autostart)?;
     }
     Ok(())
 }
 pub fn configure(owner: &str, directory: &Path, enabled: bool) -> Result<()> {
     let _lock = TASK_LOCK.lock().map_err(|_| Error::Invalid)?;
-    let result = configure_inner(owner, directory, enabled);
-    legacy_entry(owner, directory, enabled && result.is_err())?;
-    result
+    remove_legacy_entry(owner)?;
+    configure_inner(owner, directory, enabled)
 }
 fn configure_inner(owner: &str, directory: &Path, enabled: bool) -> Result<()> {
     security::validate_sid(owner)?;

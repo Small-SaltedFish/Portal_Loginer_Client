@@ -95,6 +95,75 @@ pub fn open_settings(logs: bool, preview: bool) -> Result<(), String> {
         .map_err(|_| "无法打开设置，请确认程序文件完整。".to_owned())?;
     Ok(())
 }
+pub fn tray_diagnostic(message: &str) {
+    let result = (|| -> std::io::Result<()> {
+        use std::io::Write;
+        let directory = known_folder(&FOLDERID_LocalAppData)
+            .map_err(std::io::Error::other)?
+            .join("PortalLoginer");
+        std::fs::create_dir_all(&directory)?;
+        let path = directory.join("tray.log");
+        let truncate = std::fs::metadata(&path).is_ok_and(|m| m.len() >= 32768);
+        let mut options = std::fs::OpenOptions::new();
+        options.create(true).write(true);
+        if truncate {
+            options.truncate(true);
+        } else {
+            options.append(true);
+        }
+        let mut file = options.open(path)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        writeln!(
+            file,
+            "{now} pid={} {}",
+            std::process::id(),
+            message.replace(['\r', '\n'], " ")
+        )
+    })();
+    let _ = result;
+}
+pub fn tray_diagnostics() -> String {
+    (|| -> Option<String> {
+        use std::io::{Read, Seek, SeekFrom};
+        let path = known_folder(&FOLDERID_LocalAppData)
+            .ok()?
+            .join("PortalLoginer/tray.log");
+        let mut file = std::fs::File::open(path).ok()?;
+        let size = file.metadata().ok()?.len();
+        file.seek(SeekFrom::Start(size.saturating_sub(8192))).ok()?;
+        let mut bytes = Vec::new();
+        file.take(8192).read_to_end(&mut bytes).ok()?;
+        Some(String::from_utf8_lossy(&bytes).into_owned())
+    })()
+    .unwrap_or_default()
+}
+pub fn retry_with_messages<T>(
+    timeout: std::time::Duration,
+    pause: std::time::Duration,
+    mut action: impl FnMut() -> Result<T, String>,
+) -> Result<T, String> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match action() {
+            Ok(value) => return Ok(value),
+            Err(error) if std::time::Instant::now() >= deadline => return Err(error),
+            Err(_) => {}
+        }
+        let mut message = unsafe { zeroed::<MSG>() };
+        while unsafe { PeekMessageW(&mut message, ptr::null_mut(), 0, 0, PM_REMOVE) } != 0 {
+            unsafe {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+        std::thread::sleep(
+            pause.min(deadline.saturating_duration_since(std::time::Instant::now())),
+        );
+    }
+}
 pub fn wait_for_tray_host() {
     // A logon task can run before Explorer has created its notification area.
     // Wait only for that host, never for Internet access or the auth service.
@@ -411,4 +480,33 @@ pub fn finish_update_restart(instance: u64) -> Result<(), String> {
         }
         start_tray()
     })
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::*;
+    #[test]
+    fn transient_icon_failure_retries_in_the_same_caller_and_permanent_failure_is_bounded() {
+        use std::time::Duration;
+        let mut attempts = 0;
+        let value = retry_with_messages(Duration::from_secs(1), Duration::from_millis(1), || {
+            attempts += 1;
+            if attempts < 3 {
+                Err("not ready".into())
+            } else {
+                Ok(17)
+            }
+        })
+        .unwrap();
+        assert_eq!(value, 17);
+        assert_eq!(attempts, 3);
+        let mut failed = 0;
+        let result: Result<(), String> =
+            retry_with_messages(Duration::ZERO, Duration::ZERO, || {
+                failed += 1;
+                Err("native error".into())
+            });
+        assert_eq!(result.unwrap_err(), "native error");
+        assert_eq!(failed, 1);
+    }
 }
