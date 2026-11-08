@@ -96,49 +96,29 @@ pub fn open_settings(logs: bool, preview: bool) -> Result<(), String> {
     Ok(())
 }
 pub fn tray_diagnostic(message: &str) {
-    let result = (|| -> std::io::Result<()> {
-        use std::io::Write;
-        let directory = known_folder(&FOLDERID_LocalAppData)
-            .map_err(std::io::Error::other)?
-            .join("PortalLoginer");
-        std::fs::create_dir_all(&directory)?;
-        let path = directory.join("tray.log");
-        let truncate = std::fs::metadata(&path).is_ok_and(|m| m.len() >= 32768);
-        let mut options = std::fs::OpenOptions::new();
-        options.create(true).write(true);
-        if truncate {
-            options.truncate(true);
+    const KEY: &str = r"Software\SmallSaltedFish\PortalLoginer";
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut text = reg_string(KEY, "TrayDiagnostics").unwrap_or_default();
+    text.push_str(&format!(
+        "{now} pid={} {}\n",
+        std::process::id(),
+        message.replace(['\r', '\n'], " ")
+    ));
+    while text.encode_utf16().count() > 8192 {
+        if let Some(index) = text.find('\n') {
+            text.drain(..=index);
         } else {
-            options.append(true);
+            text.clear();
+            break;
         }
-        let mut file = options.open(path)?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        writeln!(
-            file,
-            "{now} pid={} {}",
-            std::process::id(),
-            message.replace(['\r', '\n'], " ")
-        )
-    })();
-    let _ = result;
+    }
+    let _ = set_reg_string(KEY, "TrayDiagnostics", &text);
 }
 pub fn tray_diagnostics() -> String {
-    (|| -> Option<String> {
-        use std::io::{Read, Seek, SeekFrom};
-        let path = known_folder(&FOLDERID_LocalAppData)
-            .ok()?
-            .join("PortalLoginer/tray.log");
-        let mut file = std::fs::File::open(path).ok()?;
-        let size = file.metadata().ok()?.len();
-        file.seek(SeekFrom::Start(size.saturating_sub(8192))).ok()?;
-        let mut bytes = Vec::new();
-        file.take(8192).read_to_end(&mut bytes).ok()?;
-        Some(String::from_utf8_lossy(&bytes).into_owned())
-    })()
-    .unwrap_or_default()
+    reg_string(r"Software\SmallSaltedFish\PortalLoginer", "TrayDiagnostics").unwrap_or_default()
 }
 pub fn retry_with_messages<T>(
     timeout: std::time::Duration,
