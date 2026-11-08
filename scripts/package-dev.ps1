@@ -9,8 +9,8 @@ $taskSources = [ordered]@{
     'portal-service.exe' = 'target/release/portal-service.exe'
     'portal-tray.exe' = 'target/release/portal-tray.exe'
     'portal-settings.exe' = 'target/release/portal-settings.exe'
-    'PortalLoginer-0.2.7-Setup.exe' = 'dist/PortalLoginer-0.2.7-Setup.exe'
-    'PortalLoginer-0.2.7-Cleanup.exe' = 'dist/PortalLoginer-0.2.7-Cleanup.exe'
+    'PortalLoginer-0.2.8-Setup.exe' = 'dist/PortalLoginer-0.2.8-Setup.exe'
+    'PortalLoginer-0.2.8-Cleanup.exe' = 'dist/PortalLoginer-0.2.8-Cleanup.exe'
     'DESKTOP.md' = 'docs/DESKTOP.md'
     'WINDOWS.md' = 'docs/WINDOWS.md'
     'BASELINE-RESTORATION.md' = 'docs/BASELINE-RESTORATION.md'
@@ -42,6 +42,6 @@ $taskChecksums = foreach ($taskName in $taskSources.Keys) {
 }
 $taskChecksums | Set-Content -LiteralPath (Join-Path $taskOutput 'SHA256SUMS.txt') -Encoding ascii
 $taskFiles = @($taskSources.Keys) + @('SHA256SUMS.txt') | ForEach-Object { Join-Path $taskOutput $_ }
-$taskArchive = Join-Path $taskRoot 'dist/PortalLoginer-0.2.7-windows-x86_64-dev.zip'
+$taskArchive = Join-Path $taskRoot 'dist/PortalLoginer-0.2.8-windows-x86_64-dev.zip'
 Compress-Archive -LiteralPath $taskFiles -DestinationPath $taskArchive -Force
 Get-Item -LiteralPath $taskArchive | Select-Object FullName, Length

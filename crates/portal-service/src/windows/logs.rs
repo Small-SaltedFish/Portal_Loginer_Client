@@ -26,6 +26,10 @@ pub enum Event {
     Authenticated,
     ConfigSaved,
     ServiceStarted,
+    BootPolicy {
+        pause_restored: bool,
+        expired_pause: bool,
+    },
     NetworkChanged,
     CredentialUnavailable,
     StorageFailure,
@@ -142,6 +146,12 @@ impl Policy {
                 format!("failure={failure:?}")
             }
             Event::Update(code) => format!("update={code}"),
+            Event::BootPolicy {
+                pause_restored,
+                expired_pause,
+            } => {
+                format!("boot_policy pause_restored={pause_restored} expired_pause={expired_pause}")
+            }
             Event::ServiceStarted => format!(
                 "service_started version={} pid={}",
                 env!("CARGO_PKG_VERSION"),

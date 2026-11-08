@@ -260,7 +260,7 @@ pub fn boot_id() -> Result<String> {
     }
     let bytes = unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), 16) };
     const HEX: &[u8; 16] = b"0123456789abcdef";
-    Ok(bytes
+    let environment: String = bytes
         .iter()
         .flat_map(|b| {
             [
@@ -268,7 +268,13 @@ pub fn boot_id() -> Result<String> {
                 HEX[(b & 15) as usize] as char,
             ]
         })
-        .collect())
+        .collect();
+    // OS-loader boot sequence changes on a new boot even if the environment
+    // GUID is reused. It is stable across service restarts, clock changes and sleep.
+    use windows_sys::Wdk::System::SystemServices::KUSER_SHARED_DATA;
+    let shared = 0x7ffe0000usize as *const KUSER_SHARED_DATA;
+    let sequence = unsafe { ptr::read_volatile(ptr::addr_of!((*shared).BootId)) };
+    Ok(format!("v2-{environment}-{sequence:08x}"))
 }
 pub fn install_directory() -> Result<PathBuf> {
     Ok(known_folder(&FOLDERID_ProgramFiles)?.join("PortalLoginer"))
@@ -587,8 +593,9 @@ mod tests {
     fn boot_identity_is_stable_and_nonzero() {
         let first = super::boot_id().unwrap();
         assert_eq!(first, super::boot_id().unwrap());
-        assert_eq!(first.len(), 32);
-        assert_ne!(first, "0".repeat(32));
+        assert!(first.starts_with("v2-"));
+        assert_eq!(first.len(), 44);
+        assert!(first[3..35].bytes().all(|b| b.is_ascii_hexdigit()));
     }
     use super::*;
     #[test]

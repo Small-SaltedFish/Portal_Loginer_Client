@@ -125,6 +125,16 @@ async fn run_at(
     let mut dirty = true;
     let mut pending: Option<Envelope> = None;
     let boot = super::security::boot_id()?;
+    let had_pause = stored.paused_boot.is_some();
+    normalize_boot_pause(&mut stored, &boot);
+    store.save(&stored)?;
+    let _ = logs::record(
+        &store,
+        Event::BootPolicy {
+            pause_restored: paused_this_boot(&stored, &boot),
+            expired_pause: had_pause && stored.paused_boot.is_none(),
+        },
+    );
     let mut next_trigger = if stored.settings.force_boot_login
         && stored.credential_file.is_some()
         && stored.last_boot.as_ref() != Some(&boot)
@@ -289,6 +299,7 @@ async fn run_at(
             && next_trigger == Trigger::Automatic
             && tokio::time::Instant::now() >= due
         {
+            status.phase = "PAUSED".into();
             due = tokio::time::Instant::now() + Duration::from_secs(60);
         }
         if tokio::time::Instant::now() >= due && generation == signal.generation() {
@@ -584,6 +595,13 @@ async fn run_at(
     server.await.map_err(|_| Error::Invalid)??;
     Ok(())
 }
+fn normalize_boot_pause(stored: &mut Stored, boot: &str) {
+    // Legacy environment-only markers cannot identify a boot reliably.
+    // Keep a pause only when the complete, versioned boot identity matches.
+    if stored.paused_boot.as_deref() != Some(boot) {
+        stored.paused_boot = None;
+    }
+}
 fn paused_this_boot(stored: &Stored, boot: &str) -> bool {
     stored.paused_boot.as_deref() == Some(boot)
 }
@@ -758,6 +776,19 @@ mod tests {
         result.unwrap();
         assert!(fixture.store.load().unwrap().settings.paused);
         assert_eq!(fixture.store.load().unwrap().credential_file, None);
+    }
+    #[test]
+    fn new_os_boot_clears_logout_pause_even_when_environment_guid_is_reused() {
+        let mut stored = Stored::new(super::super::security::current_sid().unwrap());
+        stored.paused_boot = Some("v2-same-environment-00000010".into());
+        normalize_boot_pause(&mut stored, "v2-same-environment-00000010");
+        assert!(paused_this_boot(&stored, "v2-same-environment-00000010"));
+        normalize_boot_pause(&mut stored, "v2-same-environment-00000011");
+        assert!(stored.paused_boot.is_none());
+        stored.paused_boot = Some("legacy-environment".into());
+        normalize_boot_pause(&mut stored, "v2-same-environment-00000011");
+        assert!(stored.paused_boot.is_none());
+        assert!(!stored.settings.paused);
     }
     #[test]
     fn manual_login_resumes_pause_and_check_is_accepted_while_network_stabilizes() {

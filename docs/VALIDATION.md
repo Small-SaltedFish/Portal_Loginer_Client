@@ -218,3 +218,10 @@ GitHub 首次远端检查也已通过：[Checks](https://github.com/Small-Salted
 - 新增断开指定接口与等待 DHCP 的 Wi-Fi 选择测试、前台状态列表变更及启动/空网络标签测试。完整 93 项测试通过，静态检查通过。
 - 最终云端 Windows/Linux 检查全部通过：https://github.com/Small-SaltedFish/Portal_Loginer_Client/actions/runs/42493146575 。Linux 首次失败来自两个并行续传测试的时钟文件名碰撞，改用额外进程内唯一计数后通过；正式下载行为不受该测试隔离修复影响。
 - 0.2.7 已公开发布，安装包、内嵌卸载组件、更新 ZIP 和正式程序校验均通过。实际客户端读取官方 Release 元数据并下载 8,563,928 字节更新包，本次自动切换至 https://gh-proxy.org/，SHA-256 校验通过；未执行现场安装或重启。
+
+## Windows 0.2.8 退出登录后的下次开机恢复
+
+- 现场只读状态：0.2.7 后台运行、Wi-Fi 有地址和路由、密码保存记录仍在、持久暂停开关关闭、开机重登开启。日志中重启后未执行认证，打开面板的检查返回有效 302；与会话暂停抑制自动调度的路径吻合。
+- 旧 boot_id 仅使用启动环境 GUID。新标记增加 KUSER_SHARED_DATA.BootId（Windows 加载器的启动序号），避免环境 GUID 复用时将旧暂停当作本次暂停。旧格式及其他启动序号的 paused_boot 自动清除；同一次开机服务重启保留暂停。
+- 暂停抑制调度时同时发布 PAUSED 状态；启动只记录一次暂停恢复/失效判断，不返回凭据。
+- 参考 Windows 官方 BootId 定义：https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-kuser_shared_data 。未对现场执行退出、登录、服务重启或系统重启；真正的跨开机行为仍需现场复测。

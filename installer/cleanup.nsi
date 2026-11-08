@@ -1,7 +1,7 @@
 Unicode true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
-!define VERSION "0.2.7"
+!define VERSION "0.2.8"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\PortalLoginer"
 !include "cleanup.nsh"
 Name "Portal Loginer 卸载与残留清理"
