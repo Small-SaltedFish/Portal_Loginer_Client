@@ -225,3 +225,5 @@ GitHub 首次远端检查也已通过：[Checks](https://github.com/Small-Salted
 - 旧 boot_id 仅使用启动环境 GUID。新标记增加 KUSER_SHARED_DATA.BootId（Windows 加载器的启动序号），避免环境 GUID 复用时将旧暂停当作本次暂停。旧格式及其他启动序号的 paused_boot 自动清除；同一次开机服务重启保留暂停。
 - 暂停抑制调度时同时发布 PAUSED 状态；启动只记录一次暂停恢复/失效判断，不返回凭据。
 - 参考 Windows 官方 BootId 定义：https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-kuser_shared_data 。未对现场执行退出、登录、服务重启或系统重启；真正的跨开机行为仍需现场复测。
+- 完整 94 项本机测试、静态检查、正式构建、安装包与卸载组件校验通过。正式程序确认更新包版本 0.2.8、8,564,294 字节及 SHA-256 一致。
+- Windows/Linux 云端检查通过：https://github.com/Small-SaltedFish/Portal_Loginer_Client/actions/runs/42496019204 。源码 f6b85b2，已公开发布 v0.2.8。跨开机测试使用启动序号变化的模拟与原生当前启动标记稳定性测试；没有执行用户系统的实际重启。
