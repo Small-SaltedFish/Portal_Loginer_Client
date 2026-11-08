@@ -4,7 +4,7 @@ Unicode true
 !include "FileFunc.nsh"
 !include "x64.nsh"
 !ifndef VERSION
-!define VERSION "0.2.11"
+!define VERSION "0.2.12"
 !endif
 !define PRODUCT "Portal Loginer"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\PortalLoginer"
@@ -18,7 +18,7 @@ RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 ShowInstDetails show
 ShowUninstDetails show
-VIProductVersion "0.2.11.0"
+VIProductVersion "0.2.12.0"
 VIAddVersionKey /LANG=2052 "ProductName" "${PRODUCT}"
 VIAddVersionKey /LANG=2052 "FileDescription" "Portal Loginer 安装程序"
 VIAddVersionKey /LANG=2052 "FileVersion" "${VERSION}"

@@ -7,13 +7,13 @@ if (-not (Test-Path -LiteralPath $taskCompiler)) { $taskCompiler = (Get-Command 
 New-Item -ItemType Directory -Force (Join-Path $taskRoot 'dist') | Out-Null
 & $taskCompiler /INPUTCHARSET UTF8 /V3 (Join-Path $taskRoot 'installer/windows.nsi')
 if ($LASTEXITCODE -ne 0) { throw 'Windows installer build failed' }
-Get-Item -LiteralPath (Join-Path $taskRoot 'dist/PortalLoginer-0.2.11-Setup.exe') | Select-Object FullName, Length
-$taskPackage = Join-Path $taskRoot 'dist/PortalLoginer-0.2.11-Setup.exe'
+Get-Item -LiteralPath (Join-Path $taskRoot 'dist/PortalLoginer-0.2.12-Setup.exe') | Select-Object FullName, Length
+$taskPackage = Join-Path $taskRoot 'dist/PortalLoginer-0.2.12-Setup.exe'
 $taskHash = (Get-FileHash -LiteralPath $taskPackage -Algorithm SHA256).Hash.ToLowerInvariant()
-"$taskHash  PortalLoginer-0.2.11-Setup.exe" | Set-Content -LiteralPath "$taskPackage.sha256" -Encoding ascii
+"$taskHash  PortalLoginer-0.2.12-Setup.exe" | Set-Content -LiteralPath "$taskPackage.sha256" -Encoding ascii
 
 & $taskCompiler /INPUTCHARSET UTF8 /V3 (Join-Path $taskRoot 'installer/cleanup.nsi')
 if ($LASTEXITCODE -ne 0) { throw 'Cleanup program build failed' }
-$taskCleanup=Join-Path $taskRoot 'dist/PortalLoginer-0.2.11-Cleanup.exe'
+$taskCleanup=Join-Path $taskRoot 'dist/PortalLoginer-0.2.12-Cleanup.exe'
 $taskCleanupHash=(Get-FileHash -LiteralPath $taskCleanup -Algorithm SHA256).Hash.ToLowerInvariant()
-"$taskCleanupHash  PortalLoginer-0.2.11-Cleanup.exe" | Set-Content -LiteralPath "$taskCleanup.sha256" -Encoding ascii
+"$taskCleanupHash  PortalLoginer-0.2.12-Cleanup.exe" | Set-Content -LiteralPath "$taskCleanup.sha256" -Encoding ascii
