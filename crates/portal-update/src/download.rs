@@ -122,7 +122,7 @@ impl Downloader {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
-        let urls = MIRRORS.iter().map(|prefix| (prefix.to_string(), format!("{prefix}https://github.com/{REPOSITORY}/releases/latest/download/update-manifest.json?check={stamp}"))).collect();
+        let urls = MIRRORS.iter().map(|prefix| (prefix.to_string(), format!("{prefix}https://api.github.com/repos/{REPOSITORY}/releases/latest?check={stamp}"))).collect();
         self.latest_from(current, cached, urls).await
     }
     async fn latest_from(
@@ -139,7 +139,8 @@ impl Downloader {
             tasks.spawn(async move {
                 let started = Instant::now();
                 let result = async {
-                    let raw = client.small(&url, MAX_MANIFEST_BYTES).await?;
+                    let response = client.small(&url, MAX_MANIFEST_BYTES).await?;
+                    let raw = crate::github_manifest(&response).map_err(|_| Error::Verification)?;
                     let update =
                         verify_manifest(&raw, "0.0.0", Platform::Windows, Architecture::X86_64)
                             .map_err(|_| Error::Verification)?
@@ -437,7 +438,10 @@ mod transfer_tests {
             ))
     }
     fn metadata(version: &str) -> Vec<u8> {
-        serde_json::to_vec(&serde_json::json!({"schema":1,"repository":REPOSITORY,"version":version,"assets":[{"platform":"windows","architecture":"x86_64","name":format!("PortalLoginer-{version}-windows-x86_64-update.zip"),"url":format!("https://raw.githubusercontent.com/{REPOSITORY}/{}/updates/windows-x86_64.zip", "a".repeat(40)),"size":17,"sha256":"00".repeat(32)}]})).unwrap()
+        serde_json::to_vec(&serde_json::json!({"tag_name":format!("v{version}"),"draft":false,"prerelease":false,"assets":[{"name":format!("PortalLoginer-{version}-windows-x86_64-update.zip"),"browser_download_url":format!("https://github.com/{REPOSITORY}/releases/download/v{version}/PortalLoginer-{version}-windows-x86_64-update.zip"),"size":17,"digest":format!("sha256:{}","00".repeat(32))}]})).unwrap()
+    }
+    fn cached_metadata(version: &str) -> Vec<u8> {
+        crate::github_manifest(&metadata(version)).unwrap()
     }
     async fn metadata_server(body: Vec<u8>) -> (String, tokio::task::JoinHandle<String>) {
         let header = format!(
@@ -479,8 +483,8 @@ mod transfer_tests {
     async fn unavailable_mirrors_report_http_error_and_only_newer_cache_can_be_used() {
         for (cached, usable) in [
             (None, false),
-            (Some(metadata("0.2.10")), false),
-            (Some(metadata("0.2.11")), true),
+            (Some(cached_metadata("0.2.10")), false),
+            (Some(cached_metadata("0.2.11")), true),
         ] {
             let (url, task) = server(
                 b"HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"

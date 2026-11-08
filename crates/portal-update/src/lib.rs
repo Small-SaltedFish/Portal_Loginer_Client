@@ -162,21 +162,10 @@ pub fn verify_manifest(
         );
         let url = url::Url::parse(&asset.url).map_err(|_| Error::Origin)?;
         let path = format!("/{REPOSITORY}/releases/download/v{release}/{expected}");
-        let raw_prefix = format!("/{REPOSITORY}/");
-        let raw_path = url
-            .path()
-            .strip_prefix(&raw_prefix)
-            .and_then(|p| p.split_once('/'));
-        let repository_payload = url.host_str() == Some("raw.githubusercontent.com")
-            && raw_path.is_some_and(|(commit, path)| {
-                commit.len() == 40
-                    && commit.bytes().all(|b| b.is_ascii_hexdigit())
-                    && path == "updates/windows-x86_64.zip"
-            });
-        let release_payload = url.host_str() == Some("github.com") && url.path() == path;
         if asset.name != expected
             || url.scheme() != "https"
-            || !(repository_payload || release_payload)
+            || url.host_str() != Some("github.com")
+            || url.path() != path
             || !url.username().is_empty()
             || url.password().is_some()
             || url.port().is_some()

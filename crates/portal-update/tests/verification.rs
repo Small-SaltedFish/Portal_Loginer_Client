@@ -105,22 +105,3 @@ fn oversized_and_invalid_payload_declarations_are_rejected() {
         Err(Error::Limit)
     ));
 }
-
-#[test]
-fn repository_payload_is_pinned_to_a_commit_in_the_fixed_project() {
-    let mut v = manifest();
-    let prefix = format!("https://raw.githubusercontent.com/{REPOSITORY}/");
-    v.assets[0].url = format!("{prefix}{}/updates/windows-x86_64.zip", "a".repeat(40));
-    assert!(verify(&v).is_ok());
-    for url in [
-        format!("{prefix}main/updates/windows-x86_64.zip"),
-        format!(
-            "https://raw.githubusercontent.com/other/repo/{}/updates/windows-x86_64.zip",
-            "a".repeat(40)
-        ),
-        format!("{prefix}{}/updates/other.zip", "a".repeat(40)),
-    ] {
-        v.assets[0].url = url;
-        assert!(matches!(verify(&v), Err(Error::Origin)));
-    }
-}
